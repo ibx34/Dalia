@@ -1,0 +1,6 @@
+just_print_my_string :: to_print Str = print(to_print)
+
+main :: () = {
+    let to_print :: Str = "Hello, World!" in
+    just_print_my_string to_print
+}
