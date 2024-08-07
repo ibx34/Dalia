@@ -8,8 +8,8 @@ fn main() {
     let file = std::fs::read_to_string("./testing/main.cyl").unwrap();
     let chars = file.chars().collect::<Vec<char>>();
     let mut lexer = lexer::Lexer::init(chars);
-    lexer.lex_all();
-    println!("{:#?}", lexer);
+    lexer.all();
 
-    let parser: Parser = lexer.into();
+    let mut parser: Parser = lexer.into();
+    println!("{:#?}", parser.parse());
 }

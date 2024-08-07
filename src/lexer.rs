@@ -51,14 +51,18 @@ impl<A: Debug> Cursor<A> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum LexedResultType<'a> {
     Colon,
     Dash,
     GreaterThan,
     Newline,
     LessThan,
+    Backslash,
+    ForwardSlash,
     Character(char),
+    Plus,
+    Minus,
     Eq,
     OpenP,
     CloseP,
@@ -70,7 +74,7 @@ pub enum LexedResultType<'a> {
     StrLiteral(Cow<'a, str>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LexedResult<'a> {
     pub ty: LexedResultType<'a>,
     pub at: Range<usize>,
@@ -100,7 +104,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn lex_all(&mut self) -> Result<(), String> {
+    pub fn all(&mut self) -> Result<(), String> {
         while let Ok(peeked) = self.cursor.peek() {
             let peeked = peeked.to_owned();
             let lexed = self.lex(&peeked)?;
@@ -131,6 +135,8 @@ impl<'a> Lexer<'a> {
             &'}' => LexedResultType::CurlyCloseP,
             &'{' => LexedResultType::CurlyOpenP,
             &'-' => LexedResultType::Dash,
+            &'+' => LexedResultType::Plus,
+            &'\\' => LexedResultType::Backslash,
             &'>' => LexedResultType::GreaterThan,
             &'<' => LexedResultType::LessThan,
             &'=' => LexedResultType::Eq,
