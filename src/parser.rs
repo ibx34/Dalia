@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap, hash::Hash, marker::PhantomData};
+use std::{collections::HashMap, marker::PhantomData, string};
 
 use crate::lexer::{Cursor, LexedResult, LexedResultType, Lexer};
 
@@ -6,7 +6,7 @@ use crate::lexer::{Cursor, LexedResult, LexedResultType, Lexer};
 pub enum Definitions<'a> {
     Function {
         name: String,
-        arg_ty_list: HashMap<String, Types>,
+        arg_ty_list: Vec<FnArg>,
         return_ty: Option<Types>,
         /// References a specific block that contains the body
         /// of this function
@@ -85,7 +85,7 @@ pub struct Parser<'a> {
     pub symbols: SymbolTable<'a>,
     pub block_inc_c: usize,
     pub blocks: HashMap<usize, Block<'a>>,
-    pub current_block: Option<Block<'a>>,
+    pub current_block: Option<usize>,
 }
 
 // This is just nicer for me, but, for APIs in the future
@@ -110,7 +110,7 @@ impl<'a> From<Lexer<'a>> for Parser<'a> {
             "print".to_string(),
             Expr::Definitions(Definitions::Function {
                 name: String::from("print"),
-                arg_ty_list: HashMap::new(),
+                arg_ty_list: Vec::new(),
                 return_ty: None,
                 body: 0,
                 phantom: PhantomData,
@@ -131,7 +131,29 @@ pub enum AutoNestSetting {
     NestUnder(usize),
 }
 
+#[derive(Debug, Clone)]
+pub enum FnArg {
+    Unnamed(Types),
+    Named { name: String, ty: Types },
+}
+
 impl<'a> Parser<'a> {
+    pub fn current_block_mut(&mut self) -> Result<&mut Block<'a>, String> {
+        let Some(current_block) = self.current_block else {
+            return Err(String::from("No current block"));
+        };
+        return Ok(self.get_block(current_block).unwrap());
+    }
+
+    pub fn get_block(&mut self, block_id: usize) -> Option<&mut Block<'a>> {
+        if let Some(current_block) = self.current_block
+            && current_block == block_id
+        {
+            return self.blocks.get_mut(&current_block);
+        }
+        return self.blocks.get_mut(&block_id);
+    }
+
     // function defaults to pushing current unless specified otherwise.
     // [nest]: Defauls to nesting under current_block
     pub fn push_new_block(
@@ -149,20 +171,17 @@ impl<'a> Parser<'a> {
         let new_block = Block {
             label: block_name,
             symbols,
-            expr: expr.map(|e| Box::new(e)),
+            expr: expr.map(Box::new),
             nested_in: match nest {
                 Some(AutoNestSetting::NestUnder(under)) => Some(under),
-                _ if let Some(ref cb) = self.current_block => Some(cb.label),
+                _ if let Ok(cb) = self.current_block_mut() => Some(cb.label),
                 _ => None,
             },
         };
-        if set_current && let Some(cb) = self.current_block.to_owned() {
-            let cb = cb.to_owned();
-            self.current_block = Some(new_block);
-            self.blocks.insert(cb.label, cb);
-        } else {
-            self.current_block = Some(new_block);
+        if set_current {
+            self.current_block = Some(new_block.label);
         }
+        self.blocks.insert(new_block.label, new_block);
         Ok(())
     }
 
@@ -182,17 +201,17 @@ impl<'a> Parser<'a> {
             };
             return Ok((*symbol).to_owned());
         }
-        if let Some(cb) = &self.current_block {
+        if let Ok(cb) = self.current_block_mut() {
             if let Some(symbol) = cb.symbols.symbols.get(symbol.as_str()) {
                 return Ok((*symbol).to_owned());
             } else if let Some(nested_in) = cb.nested_in {
-                return Ok(self.get_symbol(symbol, Some(nested_in))?);
+                return self.get_symbol(symbol, Some(nested_in));
             }
         }
         if let Some(symbol) = self.symbols.symbols.get(symbol.as_str()) {
             return Ok((*symbol).to_owned());
         }
-        return Err(String::from("Could not get symbol... like at all"));
+        Err(String::from("Could not get symbol... like at all"))
     }
 
     pub fn peek_then_advance(&mut self, expected: LexedResultType) -> Result<bool, String> {
@@ -206,90 +225,135 @@ impl<'a> Parser<'a> {
     }
 
     /// Expects to start immediatly after the ::
-    pub fn parse_fn_type(
+    pub fn parse_arg_list(
         &mut self,
         symbols: &mut SymbolTable<'a>,
-    ) -> Result<HashMap<String, Types>, String> {
-        let mut fn_arg_list = HashMap::new();
+        end_at: LexedResultType<'a>,
+    ) -> Result<Vec<FnArg>, String> {
+        let mut args = Vec::new();
         while let Ok(peeked) = self.cursor.peek() {
-            let peeked = (*peeked).to_owned();
+            let peeked: LexedResult<'a> = (*peeked).to_owned();
             if let Ok(true) = self.peek_then_advance(LexedResultType::Dash)
                 && let Ok(true) = self.peek_then_advance(LexedResultType::GreaterThan)
             {
                 continue;
-            } else if peeked.ty == LexedResultType::Eq {
+            } else if peeked.ty == end_at {
                 self.cursor.advance(1)?;
-                break;
+                return Ok(args);
             }
+            if let Ok(ty) = self.parse_ty() {
+                self.cursor.advance(1)?;
+                args.push(FnArg::Unnamed(ty));
+            } else if let LexedResultType::IdentLiteral(ident) = peeked.ty {
+                let ident = ident.to_string();
+                self.cursor.advance(1)?;
 
-            let parsed = self.parse()?;
-            match parsed {
-                Expr::Type(Types::ArgumentListType { ident, ty }) => {
-                    symbols
-                        .symbols
-                        .insert(ident.to_string(), Expr::Type(*ty.to_owned()));
-                    fn_arg_list.insert(ident.to_string(), *ty);
-                }
-                Expr::Type(a) => {
-                    fn_arg_list.insert(String::from("ret"), a);
-                }
-                _ => panic!("Unexpected type..."),
+                let Ok(r#type) = &self.parse_ty() else {
+                    panic!("Expected types in the function argument list.")
+                };
+                self.cursor.advance(1)?;
+
+                symbols
+                    .symbols
+                    .insert(ident.to_owned(), Expr::Type(r#type.to_owned()));
+                args.push(FnArg::Named {
+                    name: ident,
+                    ty: r#type.to_owned(),
+                });
             }
         }
-        Ok(fn_arg_list)
+        Ok(args)
     }
 
     pub fn parse_fn_application(&mut self, fn_def: Expr<'a>) -> ParseFnResult<'a> {
-        // if let Expr::Definitions(Definitions::Function {
-        //     name,
-        //     arg_ty_list,
-        //     return_ty,
-        //     body,
-        //     phantom,
-        // }) = fn_def
-        // {
-        //     // TODO: We want paranthesis to be optional, not mandatory.
-        //     // that is for the self-compiled iteration!
-        //     if self.cursor.current()?.ty != LexedResultType::OpenP {
-        //         return Err(String::from("Expected open paran"));
-        //     }
-        //     self.cursor.advance(1)?;
-        //     let mut app_args = Vec::new();
-        //     while let Ok(expr) = self.cursor.peek() {
-        //         if expr.ty == LexedResultType::CloseP {
-        //             self.cursor.advance(1)?;
-        //             break;
-        //         }
-        //         let parsed = self.parse()?;
-        //         app_args.push(Box::new(Expr::Ref));
-        //         self.cursor.advance(1)?;
-        //     }
+        if let Ok(LexedResult { ty: LexedResultType::OpenP , .. }) = self.cursor.current() {
+            println!("Past openP?");
+            self.cursor.advance(1)?;
 
-        //     return Ok(Expr::Application {
-        //         function: name,
-        //         arguments: app_args,
-        //     });
-        // }
-        todo!()
+            if let Expr::Definitions(Definitions::Function {
+                name,
+                ..
+            }) = fn_def
+            {
+                println!("Good definition? (c:{:?})", self.cursor.current());
+                // println!("__{:?}", self.cursor.advance_ret(1)?);
+                let mut app_args = Vec::new();
+                while let Ok(expr) = self.cursor.peek() {
+                    if expr.ty == LexedResultType::CloseP {
+                        println!("BROKEN @ {:?}", self.cursor.current());
+                        self.cursor.advance(1)?;
+                        break;
+                    }
+                    let parsed = self.parse()?;
+                    app_args.push(Box::new(parsed));
+                }
+                return Ok(Expr::Application {
+                    function: name,
+                    arguments: app_args,
+                });
+            }
+        }
+        Err(String::from("Bad definition for fn call."))
     }
 
     pub fn parse_fn_definition(&mut self, ident: String) -> ParseFnResult<'a> {
         let mut symbol_table = SymbolTable {
             symbols: HashMap::new(),
         };
-        let rhs = self.parse_fn_type(&mut symbol_table)?;
-
+        let lhs = self.parse_arg_list(&mut symbol_table, LexedResultType::Eq)?;
         self.push_new_block(None, true, None, Some(symbol_table))?;
-        let lhs = self.parse()?;
-        self.current_block.as_mut().unwrap().expr = Some(Box::new(lhs.to_owned()));
-
+        println!("fn {ident:?} (c:{:?})", self.cursor.current());
+        let rhs = self.parse()?;
+        self.current_block_mut()?.expr = Some(Box::new(rhs.to_owned()));
+        println!("finished {ident:?}");
         return Ok(Expr::Definitions(Definitions::Function {
             name: ident.to_owned(),
-            arg_ty_list: rhs,
+            arg_ty_list: lhs,
             return_ty: None,
-            body: self.current_block.as_ref().unwrap().label,
+            body: self.current_block_mut()?.label,
             phantom: PhantomData,
         }));
+    }
+
+    pub fn parse_ty(&mut self) -> Result<Types, String> {
+        let current = self.cursor.current()?;
+
+        match &current.ty {
+            LexedResultType::IdentLiteral(ident) => {
+                let ident = ident.to_string();
+                if let Expr::Type(r#type) = self.get_symbol(ident.to_owned(), None)? {
+                    return Ok(r#type);
+                }
+                todo!("{:?}", ident.to_owned());
+            }
+            LexedResultType::OpenP => {
+                self.cursor.advance(1)?;
+                if let LexedResultType::CloseP = self.cursor.peek()?.ty {
+                    return Ok(Types::PlaceholderTuple);
+                } else {
+                    // this table is a useless allocation. ill refactor
+                    // this out when i rewrite the parse_arg_list fn
+                    let mut symbol_table = SymbolTable {
+                        symbols: HashMap::new(),
+                    };
+                    let arg_list = self
+                        .parse_arg_list(&mut symbol_table, LexedResultType::CloseP)?
+                        .into_iter()
+                        .map(|e| {
+                            Box::new(match e {
+                                FnArg::Unnamed(ty) => ty,
+                                FnArg::Named { ty, .. } => ty,
+                            })
+                        })
+                        .collect::<Vec<Box<Types>>>();
+                    return Ok(Types::FunctionType {
+                        arg_ty_list: arg_list,
+                        return_ty: None,
+                    });
+                }
+            }
+            a @ _ => panic!("{:?}", a),
+        }
     }
 
     pub fn parse(&mut self) -> ParseFnResult<'a> {
@@ -307,35 +371,31 @@ impl<'a> Parser<'a> {
                     self.symbols
                         .symbols
                         .insert(ident_str.to_owned(), definition.to_owned());
+                    println!("!!! {:?}", definition);
                     return Ok(definition);
                 } else if let Ok(symbol) = self.get_symbol(ident.to_string(), None) {
                     match symbol {
                         a @ Expr::Definitions(Definitions::Function { .. }) => {
-                            return Ok(self.parse_fn_application(a.to_owned())?)
+                            println!("Fn application");
+                            return self.parse_fn_application(a.to_owned())
                         }
-                        _ => return Ok(symbol.to_owned()),
+                        Expr::Type(ty) if let Some(cb) = self.current_block => {
+                            println!("{ty:?}  (c:{:?}) Should be a type reference?", self.cursor.current());
+                            return Ok(Expr::Reference {
+                                name: ident.to_string(),
+                                ty,
+                                block: cb,
+                            })
+                        }
+                        _ => {
+                            println!("We shouldnt be here...");
+                            return Ok(symbol.to_owned())
+                        },
                     }
-                } else if let Ok(Expr::Type(r#type)) = self.parse() {
-                    return Ok(Expr::Type(Types::ArgumentListType {
-                        ident: ident.to_string(),
-                        ty: Box::new(r#type),
-                    }));
                 }
                 panic!("Unahndled circumstances {:?}", ident.to_string())
             }
-            LexedResultType::OpenP => {
-                self.cursor.advance(1)?;
-                if let Ok(LexedResult {
-                    ty: LexedResultType::CloseP,
-                    ..
-                }) = self.cursor.current()
-                {
-                    self.cursor.advance(1)?;
-                    return Ok(Expr::Type(Types::PlaceholderTuple));
-                }
-                todo!()
-            }
-            a @ _ => todo!("{:?}", a),
+            a => todo!("{:?}", a),
         }
     }
 }

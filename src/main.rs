@@ -9,20 +9,9 @@ fn main() {
     let file = std::fs::read_to_string("./testing/main.cyl").unwrap();
     let chars = file.chars().collect::<Vec<char>>();
     let mut lexer = lexer::Lexer::init(chars);
-    lexer.all();
+    lexer.all().unwrap();
 
     let mut parser: Parser = lexer.into();
-    println!("{:#?}", parser.parse());
-    println!("{:#?}", parser.symbols);
+    parser.parse().unwrap();
+    println!("{:#?}", parser);
 }
-
-/*
-
-a_func_that_takes_a_func :: f (Int -> Int) = print(f(1)+1)
-that_other_func :: x Int -> Int = x + 4
-main :: () = {
-    let to_print :: Str = "Hello, World!" in
-    just_print_my_string(to_print)
-}
-
-*/
