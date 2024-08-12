@@ -13,5 +13,6 @@ fn main() {
 
     let mut parser: Parser = lexer.into();
     parser.parse().unwrap();
+    parser.parse().unwrap();
     println!("{:#?}", parser);
 }
