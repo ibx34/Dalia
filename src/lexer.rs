@@ -1,17 +1,20 @@
-use std::{borrow::Cow, fmt::Debug, ops::Range};
+use std::{borrow::Cow, fmt::Debug, ops::Range, usize};
 
 #[derive(Debug)]
-pub struct Cursor<A: Debug> {
+pub struct Cursor<A: Debug + Clone + PartialEq> {
     pub source: Vec<A>,
     pub source_len: usize,
     pub at: usize,
+    pub previous: A,
     pub line: usize,
 }
 
-impl<A: Debug> Cursor<A> {
+impl<A: Debug + Clone + PartialEq> Cursor<A> {
     pub fn init(source: Vec<A>) -> Cursor<A> {
         let source_len = source.len();
+        let first = source.get(0).unwrap();
         Cursor {
+            previous: first.to_owned(),
             source,
             source_len,
             at: 0,
@@ -20,6 +23,9 @@ impl<A: Debug> Cursor<A> {
     }
 
     pub fn advance(&mut self, amt: usize) -> Result<(), String> {
+        if amt != 0 {
+            self.previous = self.current()?.to_owned();
+        }
         self.at += amt;
         if self.at > self.source.len() {
             self.at -= amt;
@@ -33,11 +39,15 @@ impl<A: Debug> Cursor<A> {
         return self.current();
     }
 
+    pub fn newline(&mut self) {
+        self.line += 1;
+    }
+
     pub fn peek(&mut self) -> Result<&A, String> {
         if self.at + 1 > self.source_len {
             return Err(String::from("Reached EOF"));
         }
-        if let Some(source_at) = self.source.get(self.at) {
+        if let Some(source_at) = self.source.get(self.at + 1) {
             return Ok(source_at);
         }
         Err(String::from("Failed to retrieve character from source."))
@@ -48,6 +58,10 @@ impl<A: Debug> Cursor<A> {
             return Ok(source_at);
         }
         Err(String::from("Failed to retrieve character from source."))
+    }
+
+    pub fn prev(&mut self) -> Result<A, String> {
+        Ok(self.previous.to_owned())
     }
 }
 
@@ -72,9 +86,10 @@ pub enum LexedResultType<'a> {
     Bang,
     IdentLiteral(Cow<'a, str>),
     StrLiteral(Cow<'a, str>),
+    NumLiteral(usize),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LexedResult<'a> {
     pub ty: LexedResultType<'a>,
     pub at: Range<usize>,
@@ -105,7 +120,7 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn all(&mut self) -> Result<(), String> {
-        while let Ok(peeked) = self.cursor.peek() {
+        while let Ok(peeked) = self.cursor.current() {
             let peeked = peeked.to_owned();
             let lexed = self.lex(&peeked)?;
             match lexed.ty {
@@ -124,9 +139,13 @@ impl<'a> Lexer<'a> {
         }
         Ok(())
     }
+
     pub fn lex(&mut self, char: &char) -> Result<LexedResult<'a>, String> {
-        Ok(self.create_lexed_result(match char {
-            &'\n' => LexedResultType::Newline,
+        let res = match char {
+            &'\n' => {
+                self.cursor.newline();
+                LexedResultType::Newline
+            }
             &' ' => LexedResultType::Space,
             &':' => LexedResultType::Colon,
             &'!' => LexedResultType::Bang,
@@ -141,23 +160,43 @@ impl<'a> Lexer<'a> {
             &'<' => LexedResultType::LessThan,
             &'=' => LexedResultType::Eq,
             a => {
+                if a.is_numeric() {
+                    let starting_at = self.cursor.at;
+                    let mut make_str: String = self.cursor.current()?.to_string();
+                    self.cursor.advance(1)?;
+                    while let Ok(char) = self.cursor.current() {
+                        if !char.is_numeric() {
+                            break;
+                        }
+                        make_str.push(char.to_owned());
+                        self.cursor.advance(1)?;
+                    }
+                    let int = make_str.parse::<usize>().unwrap();
+                    return Ok(LexedResult {
+                        ty: LexedResultType::NumLiteral(int),
+                        at: starting_at..self.cursor.at,
+                        line: self.cursor.line,
+                    });
+                }
+
                 let is_str = a == &'"';
                 let stop_at = match a {
                     &'"' => {
                         self.cursor.advance(1)?;
                         vec!['"']
                     }
-                    a if ('a'..='Z').contains(a) ||  a != &'_'=> {
+                    a if ('a'..='Z').contains(a) ||  a != &'_' => {
                         vec![' ', '\n']
                     }
                     _ => return Err(String::from("Did not match any character and did not qualify for special treatment (\" or alphabetic)"))
                 };
-                let starting_at = self.cursor.at;
                 let mut make_str: String = self.cursor.current()?.to_string();
+                let starting_at = self.cursor.at;
                 self.cursor.advance(1)?;
-                while let Ok(char) = self.cursor.peek()
-                {
-                    if stop_at.contains(char) || (!is_str && !char.is_alphabetic() && char != &'_') {
+
+                while let Ok(char) = self.cursor.current() {
+                    if stop_at.contains(char) || (!is_str && !char.is_alphabetic() && char != &'_')
+                    {
                         break;
                     }
                     make_str.push(char.to_owned());
@@ -173,6 +212,7 @@ impl<'a> Lexer<'a> {
                     line: self.cursor.line,
                 });
             }
-        }))
+        };
+        return Ok(self.create_lexed_result(res));
     }
 }
