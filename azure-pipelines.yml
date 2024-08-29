@@ -7,7 +7,7 @@ trigger:
 - master
 
 pool:
-  vmImage: 
+  vmImage: ubuntu-latest
 
 steps:
 - script: cargo check
