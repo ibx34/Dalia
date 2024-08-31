@@ -1,2 +1,0 @@
-just_print_my_string :: to_print Str -> () = print(to_print)
-a_func_that_takes_a_func :: f (Int -> Int) = print( f(1) )

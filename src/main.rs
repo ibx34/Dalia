@@ -10,9 +10,5 @@ fn main() {
     let chars = file.chars().collect::<Vec<char>>();
     let mut lexer = lexer::Lexer::init(chars);
     lexer.all().unwrap();
-
-    let mut parser: Parser = lexer.into();
-    parser.parse().unwrap();
-    parser.parse().unwrap();
-    println!("{:#?}", parser);
+    println!("{:#?}", lexer);
 }
