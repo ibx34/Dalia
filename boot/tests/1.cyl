@@ -1,1 +1,3 @@
-// Comment
+main :: () = {
+    print "Hello, World!"
+}
