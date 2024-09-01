@@ -2,10 +2,8 @@ import Control.Monad (when)
 import Control.Monad.State
 import Data.Char (isAlpha, isAlphaNum)
 import Data.Map qualified as Map
-
--- StrLit is temporary
-data TokTy = Identifier String | StrLit String | CharLit Char | Bang | Colon | DColon | OpenP | CloseP | OpenCurlP | CloseCurlP | Eq | GreaterThan | LessThan | Dash | Plus | Backslash
-  deriving (Show, Eq)
+import Parser (parse)
+import Tokens (TokTy (Backslash, Bang, CharLit, CloseCurlP, CloseP, Colon, DColon, Dash, Eq, GreaterThan, Identifier, LessThan, NewLine, OpenCurlP, OpenP, Plus, StrLit))
 
 isTokStr :: TokTy -> Bool
 isTokStr (StrLit _) = True
@@ -86,6 +84,7 @@ lexAll = do
           case ( case currentChar of
                    ':' -> Just Colon
                    '!' -> Just Bang
+                   '\n' -> Just NewLine
                    '(' -> Just OpenP
                    ')' -> Just CloseP
                    '{' -> Just OpenCurlP
@@ -97,7 +96,6 @@ lexAll = do
                    '<' -> Just LessThan
                    '\\' -> Just Backslash
                    ' ' -> Nothing
-                   '\n' -> Nothing
                    _ -> error $ "Unknown character: " ++ [currentChar]
                ) of
             Just ty -> do
