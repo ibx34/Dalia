@@ -4,7 +4,7 @@ import Data.Char (isAlpha, isAlphaNum)
 import Data.Map qualified as Map
 
 -- StrLit is temporary
-data TokTy = Identifier String | StrLit String | Bang | Colon | OpenP | CloseP | OpenCurlP | CloseCurlP | Eq
+data TokTy = Identifier String | StrLit String | Bang | Colon | DColon | OpenP | CloseP | OpenCurlP | CloseCurlP | Eq
   deriving (Show, Eq)
 
 isTokStr :: TokTy -> Bool
@@ -20,6 +20,13 @@ data Context a = Context
 
 type Lexer a = State (Context String) a
 
+peek :: Int -> Lexer (Maybe Char)
+peek n = do
+  ctx <- get
+  let i = at ctx
+      len = length (input ctx)
+  return $ if i + n < len then Just (input ctx !! (i + n)) else Nothing
+
 initialLexer :: String -> Context String
 initialLexer input =
   Context
@@ -27,17 +34,6 @@ initialLexer input =
       at = 0,
       results = []
     }
-
-lexOne :: Char -> Maybe TokTy
-lexOne x = case x of
-  '!' -> Just Bang
-  ':' -> Just Colon
-  '(' -> Just OpenP
-  ')' -> Just CloseP
-  '{' -> Just OpenCurlP
-  '}' -> Just CloseCurlP
-  '=' -> Just Eq
-  _ -> Nothing
 
 data CollectTy = String | Ident | Comment
 
@@ -83,13 +79,25 @@ lexAll = do
           let (collect_ty, drop_from, check) = determineCollectTyAndCheck currentChar i
           lexCollectUntilHandleAll (lexCollectUntil collect_ty (drop drop_from (input ctx)) check)
           lexAll
-        else case lexOne currentChar of
-          Just token -> do
-            put ctx {at = i + 1, results = token : results ctx}
-            lexAll
-          Nothing -> do
-            put ctx {at = i + 1}
-            lexAll
+        else do
+          case ( case currentChar of
+                   ':' -> Just Colon
+                   '!' -> Just Bang
+                   '(' -> Just OpenP
+                   ')' -> Just CloseP
+                   '{' -> Just OpenCurlP
+                   '}' -> Just CloseCurlP
+                   '=' -> Just Eq
+                   ' ' -> Nothing
+                   '\n' -> Nothing
+                   _ -> error $ "Unknown character: " ++ [currentChar]
+               ) of
+            Just ty -> do
+              put ctx {at = i + 1, results = ty : results ctx}
+              lexAll
+            Nothing -> do
+              put ctx {at = i + 1}
+              lexAll
 
 main :: IO ()
 main = do

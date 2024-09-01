@@ -1,3 +1,5 @@
+simple_function_definition :: () = ()
+
 main :: () = {
     print "Hello, World!"
 }
