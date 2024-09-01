@@ -1,1 +1,0 @@
-Statically typed, functional programming language
