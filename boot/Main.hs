@@ -64,6 +64,12 @@ lexCollectUntilHandleAll lexed_val = do
     Nothing -> error "Failed to do that one thing... (1)"
   gets results
 
+determineCollectTyAndCheck :: Char -> Int -> (CollectTy, Int, Char -> Bool)
+determineCollectTyAndCheck '"' at = (String, at + 1, (/= '"'))
+determineCollectTyAndCheck c at
+  | isAlphaNum c || c == '_' = (Ident, at, \ch -> isAlphaNum ch || ch == '_')
+determineCollectTyAndCheck _ _ = error "Unsupported character"
+
 lexAll :: Lexer [TokTy]
 lexAll = do
   ctx <- get
@@ -72,24 +78,19 @@ lexAll = do
     then return (reverse $ results ctx)
     else do
       let currentChar = input ctx !! i
-      if isAlphaNum currentChar || currentChar == '_'
+      if isAlphaNum currentChar || currentChar == '_' || currentChar == '"'
         then do
-          lexCollectUntilHandleAll (lexCollectUntil Ident (drop i (input ctx)) (\c -> isAlphaNum c || c == '_'))
+          let (collect_ty, drop_from, check) = determineCollectTyAndCheck currentChar i
+          lexCollectUntilHandleAll (lexCollectUntil collect_ty (drop drop_from (input ctx)) check)
           lexAll
-        else
-          if currentChar == '"'
-            then do
-              lexCollectUntilHandleAll (lexCollectUntil String (drop (i + 1) (input ctx)) (/= '"'))
-              lexAll
-            else case lexOne currentChar of
-              Just token -> do
-                put ctx {at = i + 1, results = token : results ctx}
-                lexAll
-              Nothing -> do
-                put ctx {at = i + 1} -- Skip unknown characters
-                lexAll
+        else case lexOne currentChar of
+          Just token -> do
+            put ctx {at = i + 1, results = token : results ctx}
+            lexAll
+          Nothing -> do
+            put ctx {at = i + 1}
+            lexAll
 
--- Example usage with a file read and lexing
 main :: IO ()
 main = do
   readdFile <- readFile "./tests/1.cyl"
