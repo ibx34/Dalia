@@ -3,3 +3,5 @@ build/**
 Main.hi
 Main.o
 Main
+*.o
+*.hi
