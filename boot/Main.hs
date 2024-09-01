@@ -4,11 +4,12 @@ import Data.Char (isAlpha, isAlphaNum)
 import Data.Map qualified as Map
 
 -- StrLit is temporary
-data TokTy = Identifier String | StrLit String | Bang | Colon | DColon | OpenP | CloseP | OpenCurlP | CloseCurlP | Eq
+data TokTy = Identifier String | StrLit String | CharLit Char | Bang | Colon | DColon | OpenP | CloseP | OpenCurlP | CloseCurlP | Eq | GreaterThan | LessThan | Dash | Plus | Backslash
   deriving (Show, Eq)
 
 isTokStr :: TokTy -> Bool
 isTokStr (StrLit _) = True
+isTokStr (CharLit _) = True
 isTokStr _ = False
 
 data Context a = Context
@@ -35,7 +36,7 @@ initialLexer input =
       results = []
     }
 
-data CollectTy = String | Ident | Comment
+data CollectTy = String | Char | Ident | Comment
 
 lexCollectUntil :: CollectTy -> String -> (Char -> Bool) -> (Maybe TokTy, Int)
 lexCollectUntil ct cs check =
@@ -43,6 +44,7 @@ lexCollectUntil ct cs check =
    in case ct of
         String -> (Just (StrLit ident), length ident)
         Ident -> (Just (Identifier ident), length ident)
+        Char -> (Just (CharLit (head ident)), 1)
         Comment -> (Nothing, length ident)
 
 lexCollectUntilHandleAll :: (Maybe TokTy, Int) -> Lexer [TokTy]
@@ -62,6 +64,7 @@ lexCollectUntilHandleAll lexed_val = do
 
 determineCollectTyAndCheck :: Char -> Int -> (CollectTy, Int, Char -> Bool)
 determineCollectTyAndCheck '"' at = (String, at + 1, (/= '"'))
+determineCollectTyAndCheck '\'' at = (Char, at + 1, (/= '\''))
 determineCollectTyAndCheck c at
   | isAlphaNum c || c == '_' = (Ident, at, \ch -> isAlphaNum ch || ch == '_')
 determineCollectTyAndCheck _ _ = error "Unsupported character"
@@ -74,7 +77,7 @@ lexAll = do
     then return (reverse $ results ctx)
     else do
       let currentChar = input ctx !! i
-      if isAlphaNum currentChar || currentChar == '_' || currentChar == '"'
+      if isAlphaNum currentChar || currentChar == '_' || currentChar == '"' || currentChar == '\''
         then do
           let (collect_ty, drop_from, check) = determineCollectTyAndCheck currentChar i
           lexCollectUntilHandleAll (lexCollectUntil collect_ty (drop drop_from (input ctx)) check)
@@ -88,6 +91,11 @@ lexAll = do
                    '{' -> Just OpenCurlP
                    '}' -> Just CloseCurlP
                    '=' -> Just Eq
+                   '-' -> Just Dash
+                   '+' -> Just Plus
+                   '>' -> Just GreaterThan
+                   '<' -> Just LessThan
+                   '\\' -> Just Backslash
                    ' ' -> Nothing
                    '\n' -> Nothing
                    _ -> error $ "Unknown character: " ++ [currentChar]

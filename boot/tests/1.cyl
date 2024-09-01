@@ -1,4 +1,6 @@
 simple_function_definition :: () = ()
+function_that_pattern_matches_args :: c Char
+    \= '!' -> Bang
 
 main :: () = {
     print "Hello, World!"
