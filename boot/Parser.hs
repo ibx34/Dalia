@@ -1,26 +1,29 @@
 module Parser where
 
 import Control.Monad.State
-import Tokens (TokTy)
+import Tokens (Context (Context, at, input, results), TokTy (Identifier))
 
-data Expr deriving (Show)
+data Expr = Ident deriving (Show) 
 
-data Context a = Context
-  { input :: a,
-    at :: Int,
-    results :: [Expr]
-  }
-  deriving (Show)
+type PContext = Context [TokTy] Expr
+type Parser a = State PContext a
 
-type Parser a = State (Context TokTy) a
-
-initialLexer :: String -> Context String
-initialLexer input =
+initialParser :: [TokTy] -> PContext
+initialParser input =
   Context
     { input = input,
       at = 0,
       results = []
     }
 
-parse :: Parser [TokTy]
-parse = parse
+parse :: Parser [Expr]
+parse = do
+  ctx <- get
+  let i = at ctx
+  if i >= length (input ctx)
+    then return (reverse $ results ctx)
+    else do
+      let currentTok = input ctx !! i
+      let expr = Ident
+      put ctx { at = i + 1, results = expr : results ctx }
+      parse

@@ -2,22 +2,15 @@ import Control.Monad (when)
 import Control.Monad.State
 import Data.Char (isAlpha, isAlphaNum)
 import Data.Map qualified as Map
-import Parser (parse)
-import Tokens (TokTy (Backslash, Bang, CharLit, CloseCurlP, CloseP, Colon, DColon, Dash, Eq, GreaterThan, Identifier, LessThan, NewLine, OpenCurlP, OpenP, Plus, StrLit))
+import Parser (initialParser, parse)
+import Tokens (Context (Context, at, input, results), TokTy (Backslash, Bang, CharLit, CloseCurlP, CloseP, Colon, DColon, Dash, Eq, GreaterThan, Identifier, LessThan, NewLine, OpenCurlP, OpenP, Plus, StrLit))
 
 isTokStr :: TokTy -> Bool
 isTokStr (StrLit _) = True
 isTokStr (CharLit _) = True
 isTokStr _ = False
 
-data Context a = Context
-  { input :: a,
-    at :: Int,
-    results :: [TokTy]
-  }
-  deriving (Show)
-
-type Lexer a = State (Context String) a
+type Lexer a = State (Context String TokTy) a
 
 peek :: Int -> Lexer (Maybe Char)
 peek n = do
@@ -26,7 +19,7 @@ peek n = do
       len = length (input ctx)
   return $ if i + n < len then Just (input ctx !! (i + n)) else Nothing
 
-initialLexer :: String -> Context String
+initialLexer :: String -> Context String TokTy
 initialLexer input =
   Context
     { input = input,
@@ -109,5 +102,7 @@ main :: IO ()
 main = do
   readdFile <- readFile "./tests/1.cyl"
   let lexer = initialLexer readdFile
-      result = evalState lexAll lexer
-  print result
+      lexerRes = evalState lexAll lexer
+      parser = initialParser lexerRes
+      result = evalState parse parser
+   in print result
