@@ -1,10 +1,15 @@
+import Control.Monad (when)
 import Control.Monad.State
-import qualified Data.Map as Map
 import Data.Char (isAlpha, isAlphaNum)
+import Data.Map qualified as Map
 
 -- StrLit is temporary
 data TokTy = Identifier String | StrLit String | Bang | Colon | OpenP | CloseP | OpenCurlP | CloseCurlP | Eq
-    deriving (Show, Eq)
+  deriving (Show, Eq)
+
+isTokStr :: TokTy -> Bool
+isTokStr (StrLit _) = True
+isTokStr _ = False
 
 data Context a = Context
   { input :: a,
@@ -25,30 +30,39 @@ initialLexer input =
 
 lexOne :: Char -> Maybe TokTy
 lexOne x = case x of
-    '!' -> Just Bang
-    ':' -> Just Colon
-    '(' -> Just OpenP
-    ')' -> Just CloseP
-    '{' -> Just OpenCurlP
-    '}' -> Just CloseCurlP
-    '=' -> Just Eq
-    _   -> Nothing
+  '!' -> Just Bang
+  ':' -> Just Colon
+  '(' -> Just OpenP
+  ')' -> Just CloseP
+  '{' -> Just OpenCurlP
+  '}' -> Just CloseCurlP
+  '=' -> Just Eq
+  _ -> Nothing
 
-lexIdentifier :: String -> (TokTy, Int)
-lexIdentifier cs =
-    let (ident, rest) = span isIdentChar cs
-    in (Identifier ident, length ident)
+data CollectTy = String | Ident | Comment
 
-lexStrLit :: String -> (TokTy, Int)
-lexStrLit cs =
-    let (ident, rest) = span isStrChar cs
-    in (StrLit ident, length ident)
+lexCollectUntil :: CollectTy -> String -> (Char -> Bool) -> (Maybe TokTy, Int)
+lexCollectUntil ct cs check =
+  let (ident, rest) = span check cs
+   in case ct of
+        String -> (Just (StrLit ident), length ident)
+        Ident -> (Just (Identifier ident), length ident)
+        Comment -> (Nothing, length ident)
 
-isStrChar :: Char -> Bool
-isStrChar c = c /= '"'
-
-isIdentChar :: Char -> Bool
-isIdentChar c = isAlphaNum c || c == '_'
+lexCollectUntilHandleAll :: (Maybe TokTy, Int) -> Lexer [TokTy]
+lexCollectUntilHandleAll lexed_val = do
+  ctx <- get
+  let i = at ctx
+  let (lexed, len) = lexed_val
+  case lexed of
+    Just ident -> do
+      modify $ \ctx -> ctx {results = ident : results ctx}
+      modify $ \ctx ->
+        if isTokStr ident
+          then do ctx {at = i + len + 2}
+          else ctx {at = i + len}
+    Nothing -> error "Failed to do that one thing... (1)"
+  gets results
 
 lexAll :: Lexer [TokTy]
 lexAll = do
@@ -60,21 +74,20 @@ lexAll = do
       let currentChar = input ctx !! i
       if isAlphaNum currentChar || currentChar == '_'
         then do
-          let (identifierToken, len) = lexIdentifier (drop i (input ctx))
-          put ctx {at = i + len, results = identifierToken : results ctx}
+          lexCollectUntilHandleAll (lexCollectUntil Ident (drop i (input ctx)) (\c -> isAlphaNum c || c == '_'))
           lexAll
-        else if currentChar == '"'
-         then do
-           let (stringLiteralToken, len) = lexStrLit (drop (i + 1) (input ctx))
-           put ctx {at = i + len + 2, results = stringLiteralToken : results ctx}
-           lexAll
-        else case lexOne currentChar of
-          Just token -> do
-            put ctx {at = i + 1, results = token : results ctx}
-            lexAll
-          Nothing -> do
-            put ctx {at = i + 1}  -- Skip unknown characters
-            lexAll
+        else
+          if currentChar == '"'
+            then do
+              lexCollectUntilHandleAll (lexCollectUntil String (drop (i + 1) (input ctx)) (/= '"'))
+              lexAll
+            else case lexOne currentChar of
+              Just token -> do
+                put ctx {at = i + 1, results = token : results ctx}
+                lexAll
+              Nothing -> do
+                put ctx {at = i + 1} -- Skip unknown characters
+                lexAll
 
 -- Example usage with a file read and lexing
 main :: IO ()
