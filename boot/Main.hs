@@ -105,4 +105,6 @@ main = do
       lexerRes = evalState lexAll lexer
       parser = initialParser lexerRes
       result = evalState parse parser
-   in print result
+   in do
+        print lexerRes
+        print result
