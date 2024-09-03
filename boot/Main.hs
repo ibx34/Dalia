@@ -3,7 +3,7 @@ import Control.Monad.State
 import Data.Char (isAlpha, isAlphaNum)
 import Data.Map qualified as Map
 import Parser (initialParser, parse)
-import Tokens (Context (Context, at, input, results), TokTy (Backslash, Bang, CharLit, CloseCurlP, CloseP, Colon, DColon, Dash, Eq, GreaterThan, Identifier, LessThan, NewLine, OpenCurlP, OpenP, Plus, StrLit))
+import Tokens (Context (Context, at, input, results, symbols, at_block), TokTy (Backslash, Bang, CharLit, CloseCurlP, CloseP, Colon, DColon, Dash, Eq, GreaterThan, Identifier, LessThan, NewLine, OpenCurlP, OpenP, Plus, StrLit))
 
 isTokStr :: TokTy -> Bool
 isTokStr (StrLit _) = True
@@ -24,7 +24,9 @@ initialLexer input =
   Context
     { input = input,
       at = 0,
-      results = []
+      results = [],
+      symbols = Map.empty,
+      at_block = 0
     }
 
 data CollectTy = String | Char | Ident | Comment

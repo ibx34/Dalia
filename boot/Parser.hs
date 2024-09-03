@@ -1,9 +1,9 @@
 module Parser where
 
 import Control.Monad.State
-import Tokens (Context (Context, at, input, results), TokTy (Colon, Identifier))
-
-data Expr = Ident deriving (Show)
+import Data.Map qualified as Map
+import Data.Maybe (fromMaybe)
+import Tokens (Context (Context, at, at_block, input, results, symbols), Expr (Unit), TokTy (CloseP, Colon, Dash, Eq, GreaterThan, Identifier, OpenP))
 
 type PContext = Context [TokTy] Expr
 
@@ -21,34 +21,61 @@ initialParser input =
   Context
     { input = input,
       at = 0,
-      results = []
+      results = [],
+      symbols = Map.empty,
+      at_block = 0
     }
 
-parseIdent :: TokTy -> Parser [Expr]
+-- Handles right side (of =, not ::) of assignment
+parseAssignment :: [TokTy] -> Parser (Maybe Expr)
+parseAssignment a = do
+  let a = filter (\a -> a /= Dash || a /= GreaterThan) a
+  ctx <- get
+  modify $ \ctx -> ctx {at = length (input ctx) + 1}
+  error (show a)
+
+parseIdent :: TokTy -> Parser (Maybe Expr)
 parseIdent (Identifier ident) = do
   ctx <- get
   let i = at ctx
   first <- peek 0
   second <- peek 1
   case (first, second) of
+    -- Handles left side (of =, not ::) of assignment
     (Just Colon, Just Colon) -> do
-      modify $ \ctx -> ctx {at = i + 2, results = Ident : results ctx}
-      -- put ctx {at = i + 1, results = expr : results ctx}
-      error "Function def"
-    (_, _) -> error "Exected something.."
-  gets results
+      modify $ \ctx -> ctx {at = i + 2} --  results = Ident "Whatever" : results ctx
+      --   let (ident, rest) = span check cs
+      let (arg_list, rest) = span (== Eq) (drop i (input ctx))
+      parseAssignment arg_list
+    (_, _) -> return Nothing
 
-parse :: Parser [Expr]
-parse = do
+parseExpr :: Maybe TokTy -> Parser (Maybe Expr)
+parseExpr a = do
   ctx <- get
   let i = at ctx
   if i >= length (input ctx)
-    then return (reverse $ results ctx)
+    then return Nothing -- Return Nothing on EOF
     else do
-      let currentTok = input ctx !! i
+      let currentTok = fromMaybe (input ctx !! i) a
       case currentTok of
+        OpenP -> do
+          modify $ \ctx -> ctx {at = i + 1}
+          peeked <- peek 0
+          case peeked of
+            Just CloseP -> do
+                modify $ \ctx -> ctx {at = i + 1}
+                return (Just Unit)
+            _ -> return Nothing
         Identifier _ -> do
           modify $ \ctx -> ctx {at = i + 1}
           parseIdent currentTok
-        _ -> error "Unkown...?"
+        _ -> error "Unknown token"
+
+parse :: Parser [Expr]
+parse = do
+  maybeExpr <- parseExpr Nothing
+  case maybeExpr of
+    Nothing -> gets (reverse . results)
+    Just expr -> do
+      modify $ \ctx -> ctx {results = expr : results ctx}
       parse
