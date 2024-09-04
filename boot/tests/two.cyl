@@ -1,0 +1,3 @@
+FunctionInOtherFile :: a String = {
+    print a
+}

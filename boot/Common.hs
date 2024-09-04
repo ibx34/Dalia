@@ -4,8 +4,10 @@ import Data.Map qualified as Map
 
 data Expr deriving (Show, Eq)
 
+data Keywords = TypeDef
+ 
 data Literals = String String | Char Char | Int Int
-data LexerTokens = Identifier String 
+data LexerToken = Identifier String 
   | Literal Literals
   | OpenP
   | CloseP
@@ -13,8 +15,11 @@ data LexerTokens = Identifier String
   | GreaterThan
   | LessThan 
   | Dash
+  | Plus
   | DColon
   | Colon 
+  | ForwardSlash
+  | Backslash
   | OpenCurlyP
   | CloseCurlyP
   | OpenSquareP

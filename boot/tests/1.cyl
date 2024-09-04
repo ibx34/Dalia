@@ -1,5 +1,33 @@
-main :: () = {
-    print "Without ()"
-    print("With ()")
-    // () are optional!
+// Modules inherit their names from their final names.
+// Refer to two.cyl for "function_in_other_file"
+// 
+import "two" (FunctionInOtherFile)
+
+simpleGlobalVariable :: String = "I'm Mr. World Wide!"
+
+typedef personGender :: enum {
+    Male,
+    Female,
+    // Enums can have variants that contains value
+    Other String,
+    // Enums can have struct variants
+    Complex (struct {
+        something :: Int,
+        otherThing :: Int
+    })
+}
+
+typedef person :: struct {
+    name :: String,
+    lastName :: String,
+    middleName :: String,
+    age :: Int,
+    gender :: personGender
+}
+
+// Functions with lowercase first letters are considered private
+// similar to Go. However, because "FunctionInOtherFile" is capitalized,
+// it is public and can be used outside of just that module.
+main :: () {
+    FunctionInOtherFile "Hello, world! (From other file!)"
 }
