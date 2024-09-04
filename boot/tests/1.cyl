@@ -1,8 +1,5 @@
-some_global_var :: String = "String"
-simple_function_definition :: () = ()
-function_that_pattern_matches_args :: c Char
-    \= '!' -> Bang
-
 main :: () = {
-    print "Hello, World!"
+    print "Without ()"
+    print("With ()")
+    // () are optional!
 }
