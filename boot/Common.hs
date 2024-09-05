@@ -5,7 +5,7 @@ import Data.Map qualified as Map
 data Expr deriving (Show, Eq)
 
 data Keywords = TypeDef
- 
+
 data Literals = String String | Char Char | Int Int
 data LexerToken = Identifier String 
   | Literal Literals
@@ -26,7 +26,6 @@ data LexerToken = Identifier String
   | CloseSquareP
   | SingleQuote
   | DoubleQuote
-  
 
 data SymbolInfo = SymbolInfo
   { _type :: String,
@@ -53,3 +52,7 @@ data Context i r = Context
     at_block :: Int
   }
   deriving (Show)
+
+  
+--class BasicEq a where
+--    isEqual :: a -> a -> Bool

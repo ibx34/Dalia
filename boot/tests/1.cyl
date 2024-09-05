@@ -3,8 +3,6 @@
 // 
 import "two" (FunctionInOtherFile)
 
-simpleGlobalVariable :: String = "I'm Mr. World Wide!"
-
 typedef personGender :: enum {
     Male,
     Female,
