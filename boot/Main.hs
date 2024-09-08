@@ -2,15 +2,12 @@ import Control.Monad (when)
 import Control.Monad.State
 import Data.Char (isAlpha, isAlphaNum)
 import Data.Map qualified as Map
+import Lexer (createLexer, lexAll)
 
 main :: IO ()
 main = do
   readdFile <- readFile "./tests/1.cyl"
-  print readdFile
---   let lexer = initialLexer readdFile
---       lexerRes = evalState lexAll lexer
---       parser = initialParser lexerRes
---       result = evalState parse parser
---    in do
---         print lexerRes
---         print result
+  let lexer = createLexer readdFile
+      lexerRes = evalState lexAll lexer
+  
+  print lexerRes

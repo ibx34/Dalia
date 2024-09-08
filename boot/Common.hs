@@ -4,20 +4,22 @@ import Data.Map qualified as Map
 
 data Expr deriving (Show, Eq)
 
-data Keywords = TypeDef
+data Keywords = TypeDef deriving (Show, Eq)
 
-data Literals = String String | Char Char | Int Int
-data LexerToken = Identifier String 
+data Literals = String String | Char Char | Int Int | Comment String deriving (Show, Eq)
+
+data LexerToken
+  = Identifier String
   | Literal Literals
   | OpenP
   | CloseP
-  | Eq 
+  | Eq
   | GreaterThan
-  | LessThan 
+  | LessThan
   | Dash
   | Plus
   | DColon
-  | Colon 
+  | Colon
   | ForwardSlash
   | Backslash
   | OpenCurlyP
@@ -26,6 +28,7 @@ data LexerToken = Identifier String
   | CloseSquareP
   | SingleQuote
   | DoubleQuote
+  deriving (Show, Eq)
 
 data SymbolInfo = SymbolInfo
   { _type :: String,
@@ -53,6 +56,5 @@ data Context i r = Context
   }
   deriving (Show)
 
-  
---class BasicEq a where
+-- class BasicEq a where
 --    isEqual :: a -> a -> Bool
