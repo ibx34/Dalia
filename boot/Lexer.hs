@@ -53,45 +53,6 @@ collectUntil cs check =
   let (ident, rest) = span check cs
    in (ident, length ident)
 
--- lexCollectUntil :: CollectTy -> String -> (Char -> Bool) -> (Maybe LexerToken, Int)
--- lexCollectUntil ct cs check =
---   let (ident, rest) = span check cs
---    in case ct of
---         CTString -> (Just (Literal (String ident)), length ident)
---         CTIdent -> (Just (Identifier ident), length ident)
---         CTChar -> (Just (Literal (Char (head ident))), 1)
---         CTComment -> (Just (Literal (Comment ident)), length ident)
-
--- isTokStr :: LexerToken -> Bool
--- isTokStr (Literal (Char _)) = True
--- isTokStr (Literal (String _)) = True
--- isTokStr _ = False
-
--- lexCollectUntilHandleAll :: (Maybe LexerToken, Int) -> Lexer [LexerToken]
--- lexCollectUntilHandleAll lexed_val = do
---   ctx <- get
---   let i = at ctx
---   let (lexed, len) = lexed_val
---   case lexed of
---     Just ident -> do
---       modify $ \ctx -> ctx {results = ident : results ctx}
---       modify $ \ctx ->
---         if isTokStr ident
---           then do ctx {at = i + len + 2}
---           else ctx {at = i + len}
---     Nothing -> error "Failed to do that one thing... (1)"
---   gets results
-
--- data CollectTy = CTString | CTChar | CTIdent | CTComment
-
--- determineCollectTyAndCheck :: Char -> Int -> (CollectTy, Int, Char -> Bool)
--- determineCollectTyAndCheck '"' at = (CTString, at + 1, (/= '"'))
--- determineCollectTyAndCheck '/' at = (CTComment, at + 2, (/= '\n'))
--- determineCollectTyAndCheck '\'' at = (CTChar, at + 1, (/= '\''))
--- determineCollectTyAndCheck c at
---   | isAlphaNum c || c == '_' = (CTIdent, at, \ch -> isAlphaNum ch || ch == '_')
--- determineCollectTyAndCheck _ _ = error "Unsupported character"
-
 lexOne :: Maybe LexerToken -> Lexer (Maybe LexerToken)
 lexOne prev = do
   ctx <- get
@@ -105,7 +66,7 @@ lexOne prev = do
           ctx <- get
           let (comment, len) = collectUntil (drop (at ctx) (input ctx)) (/= '\n')
           advance len
-          return (Just (Literal (Comment comment)))
+          return (Just Comment)
         else do
           return Nothing
     -- No previous token? This must not be a multi character token

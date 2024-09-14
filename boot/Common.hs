@@ -6,7 +6,7 @@ data Expr deriving (Show, Eq)
 
 data Keywords = TypeDef deriving (Show, Eq)
 
-data Literals = String String | Char Char | Int Int | Comment String deriving (Show, Eq)
+data Literals = String String | Char Char | Int Int deriving (Show, Eq)
 
 data LexerToken
   = Identifier String
@@ -28,6 +28,7 @@ data LexerToken
   | CloseSquareP
   | SingleQuote
   | DoubleQuote
+  | Comment -- We dont care, probably keep it for later use.
   deriving (Show, Eq)
 
 data SymbolInfo = SymbolInfo
