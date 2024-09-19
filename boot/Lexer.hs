@@ -1,16 +1,20 @@
 module Lexer where
 
-import Common (Context (Context, at, at_block, blocks, input, results, sym_table), LexerToken (..), Literals (..))
-import Control.Monad (when)
+import Common (Context (Context, at, at_block, blocks, c_multi_item, input, results, sym_table), Keywords (..), LexerToken (..), Literals (..))
+import Control.Monad (void, when)
 import Control.Monad qualified
 import Control.Monad.State (MonadState (get, put), State, gets, join, modify)
 import Data.Char (isAlphaNum)
 import Data.Map qualified as Map
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isJust)
+import Prelude hiding (lex)
 
-type LexerContext = Common.Context String LexerToken
+type LexerContext = Common.Context String LexerToken Char
 
 type Lexer a = State LexerContext a
+
+matchKeyword :: String -> Maybe Keywords
+matchKeyword "typedef" = Just TypeDef
 
 createLexer :: String -> LexerContext
 createLexer a =
@@ -20,6 +24,7 @@ createLexer a =
       results = [],
       blocks = [],
       sym_table = Map.empty,
+      c_multi_item = Nothing,
       at_block = 0
     }
 
@@ -30,67 +35,27 @@ peekAndCurrentInternal n = do
     then return $ Just (input ctx !! (at ctx + n))
     else return Nothing
 
+advance :: Lexer [LexerToken]
+advance = modify (\ctx -> ctx {at = at ctx + 1}) >> lexAll
+
 peek :: Lexer (Maybe Char)
 peek = peekAndCurrentInternal 1
-
-expectPeek :: Char -> Lexer Bool
-expectPeek expected = do
-  peeked <- peek
-  case peeked of
-    Just a -> return (expected == a)
-    Nothing -> error "Peeking returned nothing (expectPeek)"
 
 current :: Lexer (Maybe Char)
 current = peekAndCurrentInternal 0
 
-advance :: Int -> Lexer ()
-advance by = do
-  ctx <- get
-  put ctx {at = at ctx + by}
-
-collectUntil :: String -> (Char -> Bool) -> (String, Int)
-collectUntil cs check =
-  let (ident, rest) = span check cs
-   in (ident, length ident)
-
-lexOne :: Maybe LexerToken -> Lexer (Maybe LexerToken)
-lexOne prev = do
-  ctx <- get
-  case prev of
-    Just ForwardSlash -> do
-      peeked <- peek
-      -- error ("Would have been d slash! " ++ show (peeked == Just '/'))
-      if peeked == Just '/'
-        then do
-          advance 2
-          ctx <- get
-          let (comment, len) = collectUntil (drop (at ctx) (input ctx)) (/= '\n')
-          advance len
-          return (Just Comment)
-        else do
-          return Nothing
-    -- No previous token? This must not be a multi character token
-    -- so we will handle it as any normal token (!, (, ), ], you get
-    -- point...)
-    Nothing -> do
-      curr <- current
-      ctx <- get
-      case curr of
-        Just ':' -> return (Just Colon)
-        Just '/' -> lexOne (Just ForwardSlash)
-        _ -> return Nothing
+lex :: Char -> Lexer [LexerToken]
+lex _ = error "test"
 
 lexAll :: Lexer [LexerToken]
 lexAll = do
   ctx <- get
-  if at ctx >= length (input ctx)
-    then return (reverse $ results ctx)
-    else do
-      ret <- lexOne Nothing
-      case ret of
-        Just ret -> do
-          put ctx {results = ret : results ctx, at = at ctx + 1}
-          lexAll
-        Nothing -> do
-          advance 1
-          lexAll
+  current <- current
+  case current of
+    -- The fact we no longer push the results
+    -- of what we just lexed means that the
+    -- responsiblity of pushing new tokens
+    -- back is up to the lex' fn, not lexAll
+    -- this also goes for advancing.
+    Just a -> lex a >> lexAll
+    Nothing -> return (reverse $ results ctx)

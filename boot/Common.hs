@@ -28,7 +28,7 @@ data LexerToken
   | CloseSquareP
   | SingleQuote
   | DoubleQuote
-  | Comment -- We dont care, probably keep it for later use.
+  | Comment String -- We dont care, probably keep it for later use.
   deriving (Show, Eq)
 
 data SymbolInfo = SymbolInfo
@@ -47,12 +47,13 @@ data Block = Block
   }
   deriving (Show, Eq)
 
-data Context i r = Context
+data Context i r b = Context
   { input :: i,
     at :: Int,
     results :: [r],
     sym_table :: SymbolTable,
     blocks :: [Block],
+    c_multi_item :: Maybe [b],
     at_block :: Int
   }
   deriving (Show)
