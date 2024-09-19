@@ -1,6 +1,6 @@
 module Lexer where
 
-import Common (Context (Context, at, at_block, blocks, c_multi_item, input, results, sym_table), Keywords (..), LexerToken (..), Literals (..))
+import Common (Context (Context, at, at_block, blocks, c_multi_item, input, results, sym_table), Keywords (..), LexerToken (..), Literals (..), isWorkingOnMultiItem)
 import Control.Monad (void, when)
 import Control.Monad qualified
 import Control.Monad.State (MonadState (get, put), State, gets, join, modify)
@@ -45,6 +45,12 @@ current :: Lexer (Maybe Char)
 current = peekAndCurrentInternal 0
 
 lex :: Char -> Lexer [LexerToken]
+lex ' ' = do
+  ctx <- get
+  if isWorkingOnMultiItem ctx
+    then do error "FINISH"
+    else error "OTHER"
+    
 lex _ = error "test"
 
 lexAll :: Lexer [LexerToken]

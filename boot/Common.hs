@@ -1,6 +1,7 @@
 module Common where
 
 import Data.Map qualified as Map
+import Data.Maybe (isJust)
 
 data Expr deriving (Show, Eq)
 
@@ -58,5 +59,8 @@ data Context i r b = Context
   }
   deriving (Show)
 
--- class BasicEq a where
---    isEqual :: a -> a -> Bool
+class IsWorkingOnMultiItem c where
+  isWorkingOnMultiItem :: c i r b -> Bool
+
+instance IsWorkingOnMultiItem Context where
+  isWorkingOnMultiItem (Context {c_multi_item}) = isJust c_multi_item
