@@ -44,14 +44,32 @@ peek = peekAndCurrentInternal 1
 current :: Lexer (Maybe Char)
 current = peekAndCurrentInternal 0
 
+endMultiLineCollection :: Lexer [LexerToken]
+endMultiLineCollection = do
+  ctx <- get
+  let new_string = c_multi_item ctx
+  case new_string of
+    Just ns -> do
+      put ctx {results = Literal (String ns) : results ctx, c_multi_item = Nothing}
+      lexAll
+    Nothing -> lexAll
+
 lex :: Char -> Lexer [LexerToken]
-lex ' ' = do
+lex a
+  | isAlphaNum a || a == '_' = do
+      ctx <- get
+      put ctx {c_multi_item = Just (maybe [a] (++ [a]) (c_multi_item ctx))}
+      advance
+      ctx <- get
+      peeked <- peek
+      case peeked of
+        Just peekedChar | isAlphaNum peekedChar || peekedChar == '_' -> lex peekedChar
+        _ -> endMultiLineCollection
+lex _ = do
   ctx <- get
   if isWorkingOnMultiItem ctx
-    then do error "FINISH"
-    else error "OTHER"
-    
-lex _ = error "test"
+    then endMultiLineCollection
+    else advance
 
 lexAll :: Lexer [LexerToken]
 lexAll = do
