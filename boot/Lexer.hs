@@ -1,9 +1,12 @@
+{-# LANGUAGE LambdaCase #-}
+
 module Lexer where
 
-import Common (Context (Context, at, at_block, blocks, c_multi_item, input, results, sym_table), Keywords (..), LexerToken (..), Literals (..), isWorkingOnMultiItem)
+import Common (Context (Context, at, at_block, blocks, c_multi_item, input, is_comment, results, sym_table), Keywords (..), LexerToken (..), Literals (..), isCurrentMultiItemComment, isWorkingOnMultiItem)
 import Control.Monad (void, when)
 import Control.Monad qualified
 import Control.Monad.State (MonadState (get, put), State, gets, join, modify)
+import Data.Bool (bool)
 import Data.Char (isAlphaNum)
 import Data.Map qualified as Map
 import Data.Maybe (fromMaybe, isJust)
@@ -25,6 +28,7 @@ createLexer a =
       blocks = [],
       sym_table = Map.empty,
       c_multi_item = Nothing,
+      is_comment = False,
       at_block = 0
     }
 
@@ -42,10 +46,14 @@ peek :: Lexer (Maybe Char)
 peek = peekAndCurrentInternal 1
 
 current :: Lexer (Maybe Char)
-current = peekAndCurrentInternal 0
+current = do
+  ctx <- get
+  if at ctx < length (input ctx)
+    then return $ Just (input ctx !! at ctx)
+    else return Nothing
 
-endMultiLineCollection :: Lexer [LexerToken]
-endMultiLineCollection = do
+endMultiCharCollection :: Lexer [LexerToken]
+endMultiCharCollection = do
   ctx <- get
   let new_string = c_multi_item ctx
   case new_string of
@@ -54,21 +62,39 @@ endMultiLineCollection = do
       lexAll
     Nothing -> lexAll
 
+collectUntil :: Bool -> Char -> (Char -> Bool) -> Lexer [LexerToken]
+collectUntil is_comment c ch = do
+  ctx <- get
+  put ctx {c_multi_item = Just (maybe [c] (++ [c]) (c_multi_item ctx))}
+  modify (\ctx -> ctx {at = at ctx + 1})
+  peeked <- peek
+  case peeked of
+    Just peekedChar | ch peekedChar -> lex peekedChar
+    _ -> endMultiCharCollection
+
 lex :: Char -> Lexer [LexerToken]
+lex '!' = do
+  ctx <- get
+  put ctx {at = at ctx + 1, results = Bang : results ctx}
+  lexAll
+lex '\n' = do
+  ctx <- get
+  bool advance endMultiCharCollection (isCurrentMultiItemComment ctx)
+lex '/' = do
+  ctx <- get
+  peek >>= \case
+    Just '/' ->
+      let (comment, other) = span (/= '\n') (drop (at ctx) (input ctx))
+       in do
+            modify (\ctx -> ctx {at = at ctx + length comment})
+            lexAll
+    a -> error ("Unexpected character trailing /: " ++ show a)
 lex a
-  | isAlphaNum a || a == '_' = do
-      ctx <- get
-      put ctx {c_multi_item = Just (maybe [a] (++ [a]) (c_multi_item ctx))}
-      advance
-      ctx <- get
-      peeked <- peek
-      case peeked of
-        Just peekedChar | isAlphaNum peekedChar || peekedChar == '_' -> lex peekedChar
-        _ -> endMultiLineCollection
+  | isAlphaNum a || a == '_' = collectUntil False a (\a -> isAlphaNum a || a == '_')
 lex _ = do
   ctx <- get
   if isWorkingOnMultiItem ctx
-    then endMultiLineCollection
+    then endMultiCharCollection
     else advance
 
 lexAll :: Lexer [LexerToken]

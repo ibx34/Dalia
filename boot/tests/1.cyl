@@ -1,1 +1,4 @@
-HIIIIII THIS IS MORE
+// Modules inherit their names from their final names.
+// Refer to two.cyl for "function_in_other_file"
+
+!

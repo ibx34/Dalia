@@ -12,6 +12,7 @@ data Literals = String String | Char Char | Int Int deriving (Show, Eq)
 data LexerToken
   = Identifier String
   | Literal Literals
+  | Bang
   | OpenP
   | CloseP
   | Eq
@@ -55,12 +56,15 @@ data Context i r b = Context
     sym_table :: SymbolTable,
     blocks :: [Block],
     c_multi_item :: Maybe [b],
+    is_comment :: Bool,
     at_block :: Int
   }
   deriving (Show)
 
 class IsWorkingOnMultiItem c where
   isWorkingOnMultiItem :: c i r b -> Bool
+  isCurrentMultiItemComment :: c i r b -> Bool
 
 instance IsWorkingOnMultiItem Context where
   isWorkingOnMultiItem (Context {c_multi_item}) = isJust c_multi_item
+  isCurrentMultiItemComment (Context {is_comment}) = is_comment
