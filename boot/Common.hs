@@ -2,6 +2,7 @@ module Common where
 
 import Data.Map qualified as Map
 import Data.Maybe (isJust)
+import Data.IntMap (Key)
 
 data Expr deriving (Show, Eq)
 
@@ -11,6 +12,7 @@ data Literals = String String | Char Char | Int Int deriving (Show, Eq)
 
 data LexerToken
   = Identifier String
+  | Keyword Keywords
   | Literal Literals
   | Bang
   | OpenP

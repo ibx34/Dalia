@@ -52,31 +52,39 @@ current = do
     then return $ Just (input ctx !! at ctx)
     else return Nothing
 
+getKeyword :: [Char] -> LexerToken
+getKeyword "typedef" = Keyword TypeDef
+getKeyword a = Literal (String a)
+
 endMultiCharCollection :: Lexer [LexerToken]
 endMultiCharCollection = do
   ctx <- get
   let new_string = c_multi_item ctx
   case new_string of
     Just ns -> do
-      put ctx {results = Literal (String ns) : results ctx, c_multi_item = Nothing}
+      put ctx {results = getKeyword ns : results ctx, c_multi_item = Nothing}
       lexAll
     Nothing -> lexAll
 
-collectUntil :: Bool -> Char -> (Char -> Bool) -> Lexer [LexerToken]
-collectUntil is_comment c ch = do
+collectUntil :: Char -> (Char -> Bool) -> Lexer [LexerToken]
+collectUntil c ch = do
   ctx <- get
   put ctx {c_multi_item = Just (maybe [c] (++ [c]) (c_multi_item ctx))}
   modify (\ctx -> ctx {at = at ctx + 1})
-  peeked <- peek
-  case peeked of
-    Just peekedChar | ch peekedChar -> lex peekedChar
+  current <- current
+  case current of
+    Just currentChar | ch currentChar -> lex currentChar
     _ -> endMultiCharCollection
 
-lex :: Char -> Lexer [LexerToken]
-lex '!' = do
+pushBack :: LexerToken -> Lexer [LexerToken]
+pushBack tok = do
   ctx <- get
-  put ctx {at = at ctx + 1, results = Bang : results ctx}
+  put ctx {at = at ctx + 1, results = tok : results ctx}
   lexAll
+
+lex :: Char -> Lexer [LexerToken]
+lex '!' = pushBack Bang
+lex ':' = pushBack Colon
 lex '\n' = do
   ctx <- get
   bool advance endMultiCharCollection (isCurrentMultiItemComment ctx)
@@ -90,7 +98,7 @@ lex '/' = do
             lexAll
     a -> error ("Unexpected character trailing /: " ++ show a)
 lex a
-  | isAlphaNum a || a == '_' = collectUntil False a (\a -> isAlphaNum a || a == '_')
+  | isAlphaNum a || a == '_' = collectUntil a (\a -> isAlphaNum a || a == '_')
 lex _ = do
   ctx <- get
   if isWorkingOnMultiItem ctx
