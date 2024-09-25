@@ -89,6 +89,10 @@ lex '|' = pushBack Pipe
 lex '=' = pushBack Eq
 lex ':' = pushBack Colon
 lex '(' = pushBack OpenP
+lex '{' = pushBack OpenCurlyP
+lex '}' = pushBack CloseCurlyP
+lex '[' = pushBack OpenSquareP
+lex ']' = pushBack CloseSquareP
 lex ',' = pushBack Comma
 lex ')' = pushBack CloseP
 lex '→' = pushBack FunctionArrow
@@ -106,6 +110,13 @@ lex '/' = do
             lexAll
     a -> error ("Unexpected character trailing /: " ++ show a)
 lex a
+  | a == 't' = do
+      ctx <- get
+      peek >>= \case
+        Just '\'' -> do
+          modify (\ctx -> ctx {at = at ctx + 1})
+          pushBack (Keyword TypeDef)
+        _ -> collectUntil 't' (\a -> isAlphaNum a || a == '_')
   | isAlphaNum a || a == '_' = collectUntil a (\a -> isAlphaNum a || a == '_')
 lex _ = do
   ctx <- get

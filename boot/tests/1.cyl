@@ -3,3 +3,11 @@ aPrivateSyntaxSugarNamedFunction\x Int, y Int → y + x
 
 // In both cases of the above, the end result will be aPrivateNotSyntaxSugarNamedFunction.
 // Internally ALL functions are curried, its a language feature <3
+
+// singlePrivateType is basically an alias for String... (String may or may not exist.?)
+
+t'singlePrivateType :: String
+t'privateCustomStructDataType :: {
+    name :: String,
+    age :: Int
+}
