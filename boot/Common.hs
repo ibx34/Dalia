@@ -21,6 +21,7 @@ data LexerToken
   | GreaterThan
   | LessThan
   | Dash
+  | Pipe
   | Plus
   | DColon
   | Colon

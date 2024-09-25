@@ -7,7 +7,7 @@ import Control.Monad (void, when)
 import Control.Monad qualified
 import Control.Monad.State (MonadState (get, put), State, gets, join, modify)
 import Data.Bool (bool)
-import Data.Char (isAlphaNum)
+import Data.Char (isAlphaNum, isNumber)
 import Data.Map qualified as Map
 import Data.Maybe (fromMaybe, isJust)
 import Prelude hiding (lex)
@@ -84,7 +84,12 @@ pushBack tok = do
 
 lex :: Char -> Lexer [LexerToken]
 lex '!' = pushBack Bang
+lex '+' = pushBack Plus
+lex '|' = pushBack Pipe
+lex '=' = pushBack Eq
 lex ':' = pushBack Colon
+lex '(' = pushBack OpenP
+lex ')' = pushBack CloseP
 lex '\n' = do
   ctx <- get
   bool advance endMultiCharCollection (isCurrentMultiItemComment ctx)

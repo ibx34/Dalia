@@ -1,4 +1,5 @@
-// Modules inherit their names from their final names.
-// Refer to two.cyl for "function_in_other_file"
+aPrivateNotSyntaxSugarNamedFunction\x Int -> \y Int -> y + x
+aPrivateSyntaxSugarNamedFunction\x Int, y Int -> y + x
 
-a_random_func :: Int
+// In both cases of the above, the end result will be aPrivateNotSyntaxSugarNamedFunction.
+// Internally ALL functions are curried, its a language feature <3
