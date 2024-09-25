@@ -22,7 +22,9 @@ data LexerToken
   | LessThan
   | Dash
   | Pipe
+  | Comma
   | Plus
+  | FunctionArrow
   | DColon
   | Colon
   | ForwardSlash

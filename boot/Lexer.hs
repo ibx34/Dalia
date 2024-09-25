@@ -89,7 +89,10 @@ lex '|' = pushBack Pipe
 lex '=' = pushBack Eq
 lex ':' = pushBack Colon
 lex '(' = pushBack OpenP
+lex ',' = pushBack Comma
 lex ')' = pushBack CloseP
+lex '→' = pushBack FunctionArrow
+lex '\\' = pushBack Backslash
 lex '\n' = do
   ctx <- get
   bool advance endMultiCharCollection (isCurrentMultiItemComment ctx)

@@ -4,3 +4,5 @@ functional language in the making.
 
 !!! NAME NOT FINAL, open issue for suggestions  
 !!! CONTRIBUTIONS WELCOME! i would love to have some more people on this :)
+
+COPY PASTE FUNCTION ARROW `→`

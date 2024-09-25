@@ -1,5 +1,5 @@
-aPrivateNotSyntaxSugarNamedFunction\x Int -> \y Int -> y + x
-aPrivateSyntaxSugarNamedFunction\x Int, y Int -> y + x
+aPrivateNotSyntaxSugarNamedFunction\x Int → \y Int → y + x
+aPrivateSyntaxSugarNamedFunction\x Int, y Int → y + x
 
 // In both cases of the above, the end result will be aPrivateNotSyntaxSugarNamedFunction.
 // Internally ALL functions are curried, its a language feature <3
