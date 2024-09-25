@@ -1,5 +1,5 @@
-aPrivateNotSyntaxSugarNamedFunction\x Int → \y Int → y + x
-aPrivateSyntaxSugarNamedFunction\x Int, y Int → y + x
+aPrivateNotSyntaxSugarNamedFunction\x Int :: (Int → Int) → \y Int :: Int → y + x
+aPrivateSyntaxSugarNamedFunction\x Int, y Int :: Int → y + x
 
 // In both cases of the above, the end result will be aPrivateNotSyntaxSugarNamedFunction.
 // Internally ALL functions are curried, its a language feature <3
@@ -11,3 +11,19 @@ t'privateCustomStructDataType :: {
     name :: String,
     age :: Int
 }
+
+// Using types IN types
+
+t'someonesAge :: Int
+t'aPerson :: {
+    // Both of these are from ANOTHER type.
+    // This could also be written as:
+    //      name :: String
+    //      age :: Int
+    name :: singlePrivateType,
+    age :: someonesAge
+}
+
+// Using custom types in functions
+// Use struct field short hands to make writing and intializing structs easier and cleaner
+buildAPerson\age Int, name String :: aPerson → aPerson { age, name } 
