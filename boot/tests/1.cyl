@@ -27,3 +27,4 @@ t'aPerson :: {
 // Using custom types in functions
 // Use struct field short hands to make writing and intializing structs easier and cleaner
 buildAPerson\age Int, name String :: aPerson → aPerson { age, name } 
+main :: aPerson → buildAPerson 17 "Justin"

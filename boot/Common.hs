@@ -8,7 +8,7 @@ data Expr deriving (Show, Eq)
 
 data Keywords = TypeDef deriving (Show, Eq)
 
-data Literals = String String | Char Char | Int Int deriving (Show, Eq)
+data Literals = Ident String | String String | Char Char | Int Int deriving (Show, Eq)
 
 data LexerToken
   = Identifier String

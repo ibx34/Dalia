@@ -10,6 +10,7 @@ import Data.Bool (bool)
 import Data.Char (isAlphaNum, isNumber)
 import Data.Map qualified as Map
 import Data.Maybe (fromMaybe, isJust)
+import Distribution.Compat.CharParsing (CharParsing (string))
 import Prelude hiding (lex)
 
 type LexerContext = Common.Context String LexerToken Char
@@ -54,7 +55,7 @@ current = do
 
 getKeyword :: [Char] -> LexerToken
 getKeyword "typedef" = Keyword TypeDef
-getKeyword a = Literal (String a)
+getKeyword a = Literal (Ident a)
 
 endMultiCharCollection :: Lexer [LexerToken]
 endMultiCharCollection = do
@@ -109,6 +110,17 @@ lex '/' = do
             modify (\ctx -> ctx {at = at ctx + length comment})
             lexAll
     a -> error ("Unexpected character trailing /: " ++ show a)
+lex '"' = do
+  -- This and char is temporary... will make better later when i Feel like it?
+  ctx <- get
+  modify (\ctx -> ctx {at = at ctx + 1})
+  ctx <- get
+  let (string, other) = span (/= '"') (drop (at ctx) (input ctx))
+   in do
+        ctx <- get
+        -- we add `+1` obviously for the closing "!
+        put ctx {at = at ctx + length string + 1, results = Literal (String string) : results ctx}
+        lexAll
 lex a
   | a == 't' = do
       ctx <- get

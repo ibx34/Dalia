@@ -14,8 +14,10 @@ type LowerStep1Context = Common.Context [LexerToken] String LexerToken
 
 type LowerStep1 a = State LowerStep1Context a
 
-createLower :: [LexerToken] -> LowerStep1Context
-createLower a =
+data Expr = DD
+
+createStairCase :: [LexerToken] -> LowerStep1Context
+createStairCase a =
   Context
     { input = a,
       at = 0,
@@ -26,3 +28,6 @@ createLower a =
       is_comment = False,
       at_block = 0
     }
+
+step :: LexerToken -> LowerStep1 [LexerToken]
+step = error "WHAT"
