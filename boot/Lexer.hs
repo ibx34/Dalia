@@ -2,7 +2,7 @@
 
 module Lexer where
 
-import Common (Context (Context, at, at_block, blocks, c_multi_item, input, is_comment, results, sym_table), Keywords (..), LexerToken (..), Literals (..), isCurrentMultiItemComment, isWorkingOnMultiItem)
+import Common (Context (Context, at, at_block, blocks, c_multi_item, input, is_comment, results, sym_table), Keywords (..), LexerToken (..), Literals (..), Primes (Type), isCurrentMultiItemComment, isWorkingOnMultiItem)
 import Control.Monad (void, when)
 import Control.Monad qualified
 import Control.Monad.State (MonadState (get, put), State, gets, join, modify)
@@ -110,6 +110,7 @@ lex '/' = do
             modify (\ctx -> ctx {at = at ctx + length comment})
             lexAll
     a -> error ("Unexpected character trailing /: " ++ show a)
+lex '\'' = error "CHARACTER UNSUPPORTED!"
 lex '"' = do
   -- This and char is temporary... will make better later when i Feel like it?
   ctx <- get
@@ -127,7 +128,7 @@ lex a
       peek >>= \case
         Just '\'' -> do
           modify (\ctx -> ctx {at = at ctx + 1})
-          pushBack (Keyword TypeDef)
+          pushBack (Prime Type)
         _ -> collectUntil 't' (\a -> isAlphaNum a || a == '_')
   | isAlphaNum a || a == '_' = collectUntil a (\a -> isAlphaNum a || a == '_')
 lex _ = do

@@ -3,15 +3,18 @@ module Common where
 import Data.Map qualified as Map
 import Data.Maybe (isJust)
 import Data.IntMap (Key)
+import Data.Kind (Type)
 
 data Expr deriving (Show, Eq)
 
 data Keywords = TypeDef deriving (Show, Eq)
 
 data Literals = Ident String | String String | Char Char | Int Int deriving (Show, Eq)
+data Primes = Type deriving (Show, Eq)
 
 data LexerToken
   = Identifier String
+  | Prime Primes
   | Keyword Keywords
   | Literal Literals
   | Bang
