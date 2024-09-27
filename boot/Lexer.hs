@@ -88,7 +88,13 @@ lex '!' = pushBack Bang
 lex '+' = pushBack Plus
 lex '|' = pushBack Pipe
 lex '=' = pushBack Eq
-lex ':' = pushBack Colon
+lex ':' = do
+  ctx <- get
+  peek >>= \case
+    Just ':' -> do
+      modify (\ctx -> ctx {at = at ctx + 1})
+      pushBack DColon
+    _ -> pushBack Colon
 lex '(' = pushBack OpenP
 lex '{' = pushBack OpenCurlyP
 lex '}' = pushBack CloseCurlyP

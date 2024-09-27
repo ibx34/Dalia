@@ -13,5 +13,5 @@ main = do
       lexerRes = evalState lexAll lexer
       stairCase = createStairCase lexerRes
       lowered = evalState stepAll stairCase
-  print lexerRes
+  -- print lexerRes
   print lowered

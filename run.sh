@@ -1,1 +1,1 @@
-cd boot && ghc Main.hs && ./main
+cd boot && ghc Main.hs -lm && ./main

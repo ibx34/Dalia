@@ -1,3 +1,5 @@
+{-# LANGUAGE LambdaCase #-}
+
 module LowerFirstStep where
 
 import Common (Context (Context, at, at_block, blocks, c_multi_item, input, is_comment, results, sym_table), Keywords (..), LexerToken (..), Literals (..), Primes (Type), isCurrentMultiItemComment, isWorkingOnMultiItem)
@@ -10,23 +12,7 @@ import Data.Map qualified as Map
 import Data.Maybe (fromMaybe, isJust)
 import Prelude hiding (lex)
 
-data LoweredExpr
-  = Assignment
-      { left :: LoweredExpr,
-        right :: LoweredExpr
-        -- todo: Maybe smth like what was used to assign??
-      }
-  | FunctionTy
-      { name :: Maybe LoweredExpr,
-        -- This isnt Maybe because a "function" assignment
-        -- without any arguments is essentially just an
-        -- assignment .......
-        type_list :: [LoweredExpr],
-        explicit_ret :: LoweredExpr
-        -- any other options here
-      }
-  | Ident' Literals
-  deriving (Show, Eq)
+data LoweredExpr deriving (Show, Eq)
 
 type LowerStep1Context = Common.Context [LexerToken] LoweredExpr LoweredExpr
 
@@ -45,8 +31,18 @@ createStairCase a =
       at_block = 0
     }
 
-advance :: LowerStep1 [LoweredExpr]
-advance = modify (\ctx -> ctx {at = at ctx + 1}) >> stepAll
+peekAndCurrentInternal :: Int -> LowerStep1 (Maybe LexerToken)
+peekAndCurrentInternal n = do
+  ctx <- get
+  if at ctx + n < length (input ctx)
+    then return $ Just (input ctx !! (at ctx + n))
+    else return Nothing
+
+advance :: LowerStep1 ()
+advance = modify (\ctx -> ctx {at = at ctx + 1})
+
+peek :: LowerStep1 (Maybe LexerToken)
+peek = peekAndCurrentInternal 1
 
 current :: LowerStep1 (Maybe LexerToken)
 current = do
@@ -55,9 +51,20 @@ current = do
     then return $ Just (input ctx !! at ctx)
     else return Nothing
 
+stepThroughLambda :: LowerStep1 ()
+stepThroughLambda = do
+  ctx <- get
+  error "WHATEVER"
+
 step :: LexerToken -> LowerStep1 [LoweredExpr]
 step (Prime Type) = error "PRIME!"
-step (Literal (Ident i)) = error "IDENTIFIER!!"
+step (Literal (Ident i)) = do
+  peek >>= \case
+    Just Backslash -> do
+      advance
+      stepThroughLambda >> stepAll
+    _ -> error "Unkown token following identifier"
+step Backslash = stepThroughLambda >> stepAll
 
 stepAll :: LowerStep1 [LoweredExpr]
 stepAll = do
