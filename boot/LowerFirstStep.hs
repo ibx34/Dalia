@@ -12,7 +12,25 @@ import Data.Map qualified as Map
 import Data.Maybe (fromMaybe, isJust)
 import Prelude hiding (lex)
 
-data LoweredExpr deriving (Show, Eq)
+data RefType = Type' deriving (Show, Eq)
+
+data LoweredExpr
+  = -- Reference allows for quick lookup of types, lambdas, etc.
+    -- used throughout the current program. The id field
+    -- correlates to a type, monad, whatever may be referenced
+    -- in the central registry so we dont have to pass
+    -- around all that extra baggage for simple jobs.
+    Reference
+      { ref_ty :: RefType,
+        id :: Int,
+        symbol_table :: Maybe Int
+      }
+  | Lambda
+      { args :: [LoweredExpr],
+        expected_ret :: LoweredExpr,
+        body :: LoweredExpr
+      }
+  deriving (Show, Eq)
 
 type LowerStep1Context = Common.Context [LexerToken] LoweredExpr LoweredExpr
 
@@ -64,7 +82,9 @@ step (Literal (Ident i)) = do
       advance
       stepThroughLambda >> stepAll
     _ -> error "Unkown token following identifier"
-step Backslash = stepThroughLambda >> stepAll
+step Backslash = do
+  advance
+  stepThroughLambda >> stepAll
 
 stepAll :: LowerStep1 [LoweredExpr]
 stepAll = do
