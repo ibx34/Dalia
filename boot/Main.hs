@@ -8,7 +8,7 @@ import LowerFirstStep (createStairCase, stepAll)
 
 main :: IO ()
 main = do
-  readdFile <- readFile "./tests/1.cyl"
+  readdFile <- readFile "./tests/1.dal"
   let lexer = createLexer readdFile
       lexerRes = evalState lexAll lexer
       stairCase = createStairCase lexerRes
