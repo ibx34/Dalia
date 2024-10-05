@@ -5,7 +5,7 @@
 
 module Parser where
 
-import Common (Context (Context, at, c_multi_item, input, is_comment, results, sym_tables, using), Expr (Place), Keywords (..), LexerToken (..), Literals (..), Primes (Type), SymbolInfo (SymbolInfo, name, val, _type), SymbolTable (SymbolTable, last_id, name_to_id, owner, table), SymbolType (PrimitiveType), isCurrentMultiItemComment, isWorkingOnMultiItem)
+import Common (Context (Context, at, c_multi_item, input, is_comment, results, sym_tables, using), Expr (Place), Keywords (..), LexerToken (..), Literals (..), Primes (Type), SymbolInfo (SymbolInfo, name, val, _type), SymbolTable (SymbolTable, last_id, name_to_id, parent, table), SymbolType (PrimitiveType), isCurrentMultiItemComment, isWorkingOnMultiItem)
 import Control.Monad (void, when)
 import Control.Monad qualified
 import Control.Monad.State (MonadState (get, put), State, gets, join, modify)
@@ -14,6 +14,7 @@ import Data.Char (isAlphaNum, isNumber)
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Maybe (fromMaybe, isJust)
+import Data.Type.Coercion (sym)
 import Distribution.Compat.CharParsing (CharParsing (string))
 import Prelude hiding (lex)
 
@@ -24,35 +25,40 @@ type Parser a = State ParserContext a
 -- TODO: Make helper fn to make creating maps + insert nicer PLSSS
 createParser :: [LexerToken] -> ParserContext
 createParser a =
-  let global_symbol_table = Map.empty
-      global_symbol_table' =
-        Map.insert
-          0
-          SymbolInfo
-            { _type = PrimitiveType,
-              val = Nothing,
-              name = "int"
-            }
-          global_symbol_table
-      name_to_id = Map.empty
-      name_to_id' = Map.insert "int" 0 name_to_id
-      sym_tables = Map.empty
-      sym_tables' =
-        Map.insert
-          0
-          SymbolTable
-            { table = global_symbol_table',
-              last_id = 0,
-              name_to_id = name_to_id,
-              owner = Nothing
-            }
-          sym_tables
+  let sym_tables =
+        Map.fromList
+          [ ( 0,
+              SymbolTable
+                { table =
+                    Map.fromList
+                      [ ( 0,
+                          SymbolInfo
+                            { _type = PrimitiveType,
+                              val = Nothing,
+                              name = "int"
+                            }
+                        )
+                      ],
+                  last_id = 0,
+                  name_to_id = Map.fromList [("int", 0)],
+                  parent = Nothing
+                }
+            ),
+            ( 1,
+              SymbolTable
+                { table = Map.empty,
+                  last_id = 0,
+                  name_to_id = Map.empty,
+                  parent = Just 0
+                }
+            )
+          ]
    in Context
         { input = a,
           at = 0,
           results = [],
-          using = Nothing,
-          sym_tables = sym_tables',
+          using = 0,
+          sym_tables = sym_tables,
           c_multi_item = Nothing,
           is_comment = False
         }
@@ -76,19 +82,28 @@ current = do
     then return $ Just (input ctx !! at ctx)
     else return Nothing
 
-currentSymTab :: Parser SymbolTable
-currentSymTab = do
+getSymboltable :: Int -> Parser SymbolTable
+getSymboltable i = do
   ctx <- get
-  let symbol_table_id = fromMaybe 0 (using ctx)
-      symbol_table = Map.lookup symbol_table_id (sym_tables ctx)
+  let symbol_table = Map.lookup i (sym_tables ctx)
    in case symbol_table of
         Just st -> return st
-        Nothing -> error "Could not find default symbol table, or current symbol (how is this possible?)"
+        Nothing -> error ("Could not find default symbol table, or current symbol\n\n" ++ show (sym_tables ctx))
 
-getSymbol :: String -> Parser SymbolInfo 
-getSymbol = do
-  ctx <- get
-  error "TODO!"
+getSymbol :: String -> Maybe Int -> Parser SymbolInfo
+getSymbol s st =
+  getSymboltable (fromMaybe 0 st) >>= \current_symbol_table ->
+    case Map.lookup s (name_to_id current_symbol_table) of
+      Just symbol_id -> case Map.lookup symbol_id (table current_symbol_table) of
+        Just symbol -> return symbol
+        Nothing -> error "TODO!!"
+      Nothing -> do
+        getSymbol
+          s
+          ( case parent current_symbol_table of
+              Just id -> Just id
+              Nothing -> error ("Could not find the symbol '" ++ s ++ "'")
+          )
 
 -- Arguemnt lists are universal ... one big blanket function, yay!
 -- make the whole `Maybe LexerToken` nicer? I cant decide if the
@@ -98,7 +113,7 @@ parseArgList a (Just OpenP) = do
   modify (\ctx -> ctx {at = at ctx + 1})
   ctx <- get
   current <- current
-  inner_arg_list <- parseArgList SymbolTable {table = Map.empty, name_to_id = Map.empty, owner = Nothing, last_id = 0} current
+  inner_arg_list <- parseArgList SymbolTable {table = Map.empty, name_to_id = Map.empty, parent = Nothing, last_id = 0} current
   error ("Inner arg list: " ++ show inner_arg_list)
 parseArgList a (Just Comma) = do
   modify (\ctx -> ctx {at = at ctx + 1})
@@ -126,11 +141,13 @@ parse (Literal (Ident i)) = do
       -- no clear disctinction of lambda symbol table and the lambda
       -- argument list because at the end of the day the arguments
       -- introducted will have to be in the symbol table to be used.
-      starting_symbol_table <- parseArgList SymbolTable {table = Map.empty, name_to_id = Map.empty, owner = Nothing, last_id = 0} current
+      starting_symbol_table <- parseArgList SymbolTable {table = Map.empty, name_to_id = Map.empty, parent = Nothing, last_id = 0} current
       return (Just Place)
     Just (Literal (Ident i)) -> do
-      error ("Sub-ident: " ++ i)
-    a -> error ("ASC Unkown: " ++ show a)
+      symbol <- getSymbol i (Just 1)
+      error ("Whatever: " ++ show symbol)
+    a -> do
+      error "Whatever "
 parse a = error ("Unkown: " ++ show a)
 
 parseAll :: Parser [Expr]

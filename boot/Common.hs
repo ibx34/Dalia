@@ -73,7 +73,7 @@ data SymbolTable = SymbolTable
   { table :: Map.Map Int SymbolInfo,
     name_to_id :: Map.Map String Int,
     last_id :: Int,
-    owner :: Maybe Int
+    parent :: Maybe Int
   }
   deriving (Show, Eq)
 
@@ -83,7 +83,7 @@ data Context i r b = Context
     results :: [r],
     -- 0 is always the like "global"(?) symbol table
     sym_tables :: Map Int SymbolTable,
-    using :: Maybe Int,
+    using :: Int,
     c_multi_item :: Maybe [b],
     is_comment :: Bool
   }
