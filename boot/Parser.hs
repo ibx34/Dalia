@@ -5,7 +5,7 @@
 
 module Parser where
 
-import Common (Context (Context, at, c_multi_item, input, is_comment, results, sym_tables, using), Expr (Place, Reference, id, symbol_table), Keywords (..), LexerToken (..), Literals (..), Primes (Type), SymbolInfo (SymbolInfo, name, val), SymbolTable (SymbolTable, last_id, name_to_id, parent, table), SymbolType (PrimitiveType), isCurrentMultiItemComment, isWorkingOnMultiItem)
+import Common (Context (Context, at, c_multi_item, input, is_comment, results, sym_tables, using), Expr (Place, Reference, id, symbol_table), Keywords (..), LexerToken (..), Literals (..), Primes (Type), SymbolInfo (SymbolInfo, name, val), SymbolTable (SymbolTable, next_id, name_to_id, parent, table), SymbolType (PrimitiveType), isCurrentMultiItemComment, isWorkingOnMultiItem)
 import Control.Monad (void, when)
 import Control.Monad qualified
 import Control.Monad.State (MonadState (get, put), State, gets, join, modify)
@@ -38,7 +38,7 @@ createParser a =
                             }
                         )
                       ],
-                  last_id = 0,
+                  next_id = 0,
                   name_to_id = Map.fromList [("int", 0)],
                   parent = Nothing
                 }
@@ -46,7 +46,7 @@ createParser a =
             ( 1,
               SymbolTable
                 { table = Map.empty,
-                  last_id = 0,
+                  next_id = 0,
                   name_to_id = Map.empty,
                   parent = Just 0
                 }
@@ -111,13 +111,13 @@ insertSymbol st n e = do
     SymbolTable
       { table =
           Map.insert
-            (last_id st)
+            (next_id st)
             SymbolInfo
               { val = Just e,
                 name = n
               }
             (table st),
-        last_id = last_id st + 1,
+        next_id = next_id st + 1,
         parent = parent st,
         name_to_id = name_to_id st
       }
@@ -133,7 +133,7 @@ parseArgList a (Just OpenP) = do
   modify (\ctx -> ctx {at = at ctx + 1})
   ctx <- get
   current <- current
-  inner_arg_list <- parseArgList SymbolTable {table = Map.empty, name_to_id = Map.empty, parent = Nothing, last_id = 0} current
+  inner_arg_list <- parseArgList SymbolTable {table = Map.empty, name_to_id = Map.empty, parent = Nothing, next_id = 0} current
   error ("Inner arg list: " ++ show inner_arg_list)
 parseArgList a (Just Comma) = do
   modify (\ctx -> ctx {at = at ctx + 1})
@@ -163,7 +163,7 @@ parse (Literal (Ident i)) = do
       -- no clear disctinction of lambda symbol table and the lambda
       -- argument list because at the end of the day the arguments
       -- introducted will have to be in the symbol table to be used.
-      starting_symbol_table <- parseArgList SymbolTable {table = Map.empty, name_to_id = Map.empty, parent = Nothing, last_id = 0} current
+      starting_symbol_table <- parseArgList SymbolTable {table = Map.empty, name_to_id = Map.empty, parent = Nothing, next_id = 0} current
       error ("Lambda starting symbol table:\n\n" ++ show starting_symbol_table)
       return (Just Place)
     Just (Literal (Ident i)) -> do

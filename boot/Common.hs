@@ -68,7 +68,7 @@ data SymbolInfo = SymbolInfo
 data SymbolTable = SymbolTable
   { table :: Map.Map Int SymbolInfo,
     name_to_id :: Map.Map String Int,
-    last_id :: Int,
+    next_id :: Int,
     parent :: Maybe Int
   }
   deriving (Show, Eq)
