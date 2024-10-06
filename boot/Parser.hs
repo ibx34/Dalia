@@ -5,7 +5,7 @@
 
 module Parser where
 
-import Common (Context (Context, at, c_multi_item, input, is_comment, results, sym_tables, using), Expr (Place), Keywords (..), LexerToken (..), Literals (..), Primes (Type), SymbolInfo (SymbolInfo, name, val, _type), SymbolTable (SymbolTable, last_id, name_to_id, parent, table), SymbolType (PrimitiveType), isCurrentMultiItemComment, isWorkingOnMultiItem)
+import Common (Context (Context, at, c_multi_item, input, is_comment, results, sym_tables, using), Expr (Place, Reference, id, symbol_table), Keywords (..), LexerToken (..), Literals (..), Primes (Type), SymbolInfo (SymbolInfo, name, val), SymbolTable (SymbolTable, last_id, name_to_id, parent, table), SymbolType (PrimitiveType), isCurrentMultiItemComment, isWorkingOnMultiItem)
 import Control.Monad (void, when)
 import Control.Monad qualified
 import Control.Monad.State (MonadState (get, put), State, gets, join, modify)
@@ -33,8 +33,7 @@ createParser a =
                     Map.fromList
                       [ ( 0,
                           SymbolInfo
-                            { _type = PrimitiveType,
-                              val = Nothing,
+                            { val = Nothing,
                               name = "int"
                             }
                         )
@@ -90,25 +89,46 @@ getSymboltable i = do
         Just st -> return st
         Nothing -> error ("Could not find default symbol table, or current symbol\n\n" ++ show (sym_tables ctx))
 
-getSymbol :: String -> Maybe Int -> Parser SymbolInfo
+getSymbol :: String -> Maybe Int -> Parser (SymbolInfo, Int, Int)
 getSymbol s st =
-  getSymboltable (fromMaybe 0 st) >>= \current_symbol_table ->
-    case Map.lookup s (name_to_id current_symbol_table) of
-      Just symbol_id -> case Map.lookup symbol_id (table current_symbol_table) of
-        Just symbol -> return symbol
-        Nothing -> error "TODO!!"
-      Nothing -> do
-        getSymbol
-          s
-          ( case parent current_symbol_table of
-              Just id -> Just id
-              Nothing -> error ("Could not find the symbol '" ++ s ++ "'")
-          )
+  let symbol_table_id = fromMaybe 0 st
+   in getSymboltable symbol_table_id >>= \current_symbol_table ->
+        case Map.lookup s (name_to_id current_symbol_table) of
+          Just symbol_id -> case Map.lookup symbol_id (table current_symbol_table) of
+            Just symbol -> return (symbol, symbol_id, symbol_table_id)
+            Nothing -> error "TODO!!"
+          Nothing -> do
+            getSymbol
+              s
+              ( case parent current_symbol_table of
+                  Just id -> Just id
+                  Nothing -> error ("Could not find the symbol '" ++ s ++ "'")
+              )
+
+insertSymbol :: SymbolTable -> String -> Expr -> Parser SymbolTable
+insertSymbol st n e = do
+  return
+    SymbolTable
+      { table =
+          Map.insert
+            (last_id st)
+            SymbolInfo
+              { val = Just e,
+                name = n
+              }
+            (table st),
+        last_id = last_id st + 1,
+        parent = parent st,
+        name_to_id = name_to_id st
+      }
 
 -- Arguemnt lists are universal ... one big blanket function, yay!
 -- make the whole `Maybe LexerToken` nicer? I cant decide if the
 -- optioanl value should be handlered her
 parseArgList :: SymbolTable -> Maybe LexerToken -> Parser SymbolTable
+parseArgList a (Just DColon) = do
+  modify (\ctx -> ctx {at = at ctx + 1})
+  return a
 parseArgList a (Just OpenP) = do
   modify (\ctx -> ctx {at = at ctx + 1})
   ctx <- get
@@ -120,12 +140,14 @@ parseArgList a (Just Comma) = do
   ctx <- get
   current <- current
   parseArgList a current
-parseArgList a (Just DColon) = do
-  modify (\ctx -> ctx {at = at ctx + 1})
-  return a
-parseArgList _ (Just a) = do
-  parsed <- parse a
-  error ("Parsed Argument " ++ show parsed)
+parseArgList st (Just (Literal (Ident i))) = do
+  ctx <- get
+  parse (Literal (Ident i)) >>= \case
+    Just parsed -> do
+      current <- current
+      st' <- insertSymbol st i parsed
+      parseArgList st' current
+    Nothing -> error "BYE BYE"
 parseArgList _ a = do
   error ("Unexpected Argument " ++ show a)
 
@@ -142,12 +164,20 @@ parse (Literal (Ident i)) = do
       -- argument list because at the end of the day the arguments
       -- introducted will have to be in the symbol table to be used.
       starting_symbol_table <- parseArgList SymbolTable {table = Map.empty, name_to_id = Map.empty, parent = Nothing, last_id = 0} current
+      error ("Lambda starting symbol table:\n\n" ++ show starting_symbol_table)
       return (Just Place)
     Just (Literal (Ident i)) -> do
-      symbol <- getSymbol i (Just 1)
-      error ("Whatever: " ++ show symbol)
+      modify (\ctx -> ctx {at = at ctx + 1})
+      (symbol, id, symbol_table) <- getSymbol i Nothing
+      return
+        ( Just
+            Reference
+              { Common.id = id,
+                symbol_table = Just symbol_table
+              }
+        )
     a -> do
-      error "Whatever "
+      error ("Whatever: " ++ show a)
 parse a = error ("Unkown: " ++ show a)
 
 parseAll :: Parser [Expr]

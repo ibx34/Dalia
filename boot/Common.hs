@@ -6,8 +6,6 @@ import Data.Map
 import Data.Map qualified as Map
 import Data.Maybe (isJust)
 
-data RefType = RType | Function | Variable deriving (Show, Eq)
-
 data Expr
   = Lambda
       { symbols :: SymbolTable,
@@ -18,8 +16,7 @@ data Expr
         right :: Expr
       }
   | Reference
-      { ref_ty :: RefType,
-        id :: Int,
+      { id :: Int,
         symbol_table :: Maybe Int
       }
   | Place
@@ -63,8 +60,7 @@ data LexerToken
 data SymbolType = Assignment' | PrimitiveType deriving (Show, Eq)
 
 data SymbolInfo = SymbolInfo
-  { _type :: SymbolType,
-    val :: Maybe Expr,
+  { val :: Maybe Expr,
     name :: String
   }
   deriving (Show, Eq)
