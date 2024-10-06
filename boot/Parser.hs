@@ -5,7 +5,7 @@
 
 module Parser where
 
-import Common (Context (Context, at, c_multi_item, input, is_comment, results, sym_tables, using), Expr (Place, Reference, id, symbol_table), Keywords (..), LexerToken (..), Literals (..), Primes (Type), SymbolInfo (SymbolInfo, name, val), SymbolTable (SymbolTable, next_id, name_to_id, parent, table), SymbolType (PrimitiveType), isCurrentMultiItemComment, isWorkingOnMultiItem)
+import Common (Context (Context, at, c_multi_item, input, is_comment, results, sym_tables, using), Expr (Place, Reference, id, symbol_table), Keywords (..), LexerToken (..), Literals (..), Primes (Type), SymbolInfo (SymbolInfo, name, val), SymbolTable (SymbolTable, name_to_id, next_id, parent, table), SymbolType (PrimitiveType), isCurrentMultiItemComment, isWorkingOnMultiItem)
 import Control.Monad (void, when)
 import Control.Monad qualified
 import Control.Monad.State (MonadState (get, put), State, gets, join, modify)
@@ -119,7 +119,7 @@ insertSymbol st n e = do
             (table st),
         next_id = next_id st + 1,
         parent = parent st,
-        name_to_id = name_to_id st
+        name_to_id = Map.insert n (next_id st) (name_to_id st)
       }
 
 -- Arguemnt lists are universal ... one big blanket function, yay!
