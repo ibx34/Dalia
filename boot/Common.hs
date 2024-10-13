@@ -7,6 +7,26 @@ import Data.Map qualified as Map
 import Data.Maybe (isJust)
 import Text.Parsec.Token (GenTokenParser (symbol))
 
+data Literals = Ident String | String String | Char Char | Int Int deriving (Show, Eq)
+
+data Associativity = Left' | Right' | Non'
+
+data OperatorInfo = OperatorInfo
+  { precedence :: Int,
+    associativity :: Associativity
+  }
+
+operatorTable :: Map String OperatorInfo
+operatorTable =
+  fromList
+    [ ("+", OperatorInfo 1 Left'),
+      ("-", OperatorInfo 1 Left'),
+      ("*", OperatorInfo 2 Left'),
+      ("/", OperatorInfo 2 Left')
+    ]
+
+data Operators = Plus | Minus deriving (Show, Eq)
+
 -- TODO: when we get to the llvm add a function to convert these into
 -- some llvm type shi
 data PrimitiveType = Int' deriving (Show, Eq)
@@ -16,6 +36,18 @@ data Expr
       { st :: Int,
         si :: Int
       }
+  | BinaryOp Operators Expr Expr
+  | Assignment {
+    left :: Expr,
+    right :: Expr,
+    op :: Int
+  }
+  | Fake
+  | Lambda
+      { parameters :: SymbolTable,
+        expr :: Expr
+      }
+  | Literal' Literals
   | PrimitiveType PrimitiveType
   deriving (Show, Eq)
 
@@ -42,8 +74,6 @@ getSymbolByName st name = Map.lookup name (name_to_id st) >>= \id -> getSymbol s
 
 data Keywords = TypeDef deriving (Show, Eq)
 
-data Literals = Ident String | String String | Char Char | Int Int deriving (Show, Eq)
-
 data Primes = Type deriving (Show, Eq)
 
 data LexerToken
@@ -60,7 +90,7 @@ data LexerToken
   | Dash
   | Pipe
   | Comma
-  | Plus
+  | Plus'
   | FunctionArrow
   | DColon
   | Colon
@@ -81,6 +111,7 @@ data Context i r b = Context
     results :: [r],
     -- 0 is always the like "global"(?) symbol table
     sym_tables :: Map Int SymbolTable,
+    last_symbol_table_id :: Int,
     using :: Int,
     c_multi_item :: Maybe [b],
     is_comment :: Bool

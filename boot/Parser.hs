@@ -4,7 +4,7 @@
 
 module Parser where
 
-import Common (Context (Context, at, c_multi_item, input, is_comment, results, sym_tables, using), Expr (PrimitiveType, SymbolReference), Keywords (..), LexerToken (..), Literals (..), Primes (Type), PrimitiveType (Int'), Symbol (Symbol, from_lib, name, val), SymbolTable (SymbolTable, last_id, name_to_id, parent, symbols), isCurrentMultiItemComment, isWorkingOnMultiItem, si, st)
+import Common (Context (Context, at, c_multi_item, input, is_comment, last_symbol_table_id, results, sym_tables, using), Expr (Assignment, Fake, Lambda, Literal', PrimitiveType, SymbolReference, expr, left, op, parameters, right), Keywords (..), LexerToken (..), Literals (..), Primes (Type), PrimitiveType (Int'), Symbol (Symbol, from_lib, name, val), SymbolTable (SymbolTable, last_id, name_to_id, parent, symbols), isCurrentMultiItemComment, isWorkingOnMultiItem, si, st)
 import Control.Monad (void, when)
 import Control.Monad qualified
 import Control.Monad.State (MonadState (get, put), State, gets, join, modify)
@@ -50,6 +50,7 @@ createParser a =
         { input = a,
           at = 0,
           results = [],
+          last_symbol_table_id = 0,
           using = 0,
           sym_tables = sym_tables,
           c_multi_item = Nothing,
@@ -83,22 +84,19 @@ getSymboltable i = do
         Just st -> return st
         Nothing -> error ("Could not find default symbol table, or current symbol\n\n" ++ show (sym_tables ctx))
 
-getSymbol :: String -> Maybe Int -> Parser (Symbol, Int, Int)
+getSymbol :: String -> Maybe Int -> Parser (Maybe (Symbol, Int, Int))
 getSymbol s st =
   get >>= \ctx ->
     let symbol_table_id = fromMaybe (using ctx) st
      in getSymboltable symbol_table_id >>= \current_symbol_table ->
           case Map.lookup s (name_to_id current_symbol_table) of
             Just symbol_id -> case Map.lookup symbol_id (symbols current_symbol_table) of
-              Just symbol -> return (symbol, symbol_id, symbol_table_id)
-              Nothing -> error "TODO!!"
+              Just symbol -> return (Just (symbol, symbol_id, symbol_table_id))
+              Nothing -> return Nothing
             Nothing -> do
-              getSymbol
-                s
-                ( case parent current_symbol_table of
-                    Just id -> Just id
-                    Nothing -> error ("Could not find the symbol '" ++ s ++ "'")
-                )
+              if st == Just 0
+                then return Nothing
+                else getSymbol s (Just (fromMaybe 0 (parent current_symbol_table)))
 
 insertSymbol :: SymbolTable -> String -> Expr -> Parser SymbolTable
 insertSymbol st n e =
@@ -127,10 +125,15 @@ parseLambdaParameters (Just (Literal (Ident i))) st = do
       parse c >>= \expr -> do
         st' <- insertSymbol st i expr
         current >>= \c -> parseLambdaParameters c st'
-    Nothing -> error "Current was Nothing."
+    Nothing -> error "Current was Nothing1."
 parseLambdaParameters (Just DColon) st = do
   modify (\ctx -> ctx {at = at ctx + 1})
-  return st
+  current >>= \case
+    Just c ->
+      parse c >>= \expr -> do
+        st' <- insertSymbol st "ret" expr
+        return st
+    Nothing -> error "Current was Nothing2."
 parseLambdaParameters (Just Comma) st = do
   modify (\ctx -> ctx {at = at ctx + 1})
   current >>= \c -> parseLambdaParameters c st
@@ -139,15 +142,45 @@ parse :: LexerToken -> Parser Expr
 parse Backslash = do
   modify (\ctx -> ctx {at = at ctx + 1})
   parameters <- current >>= \c -> parseLambdaParameters c SymbolTable {symbols = Map.empty, name_to_id = Map.empty, parent = Nothing, last_id = 0}
-  error (show parameters)
-parse (Literal (Ident i)) = do
-  (symbol, si', st') <- getSymbol i Nothing
+  ctx <- get
+  let new_symbol_table_id = (last_symbol_table_id ctx + 1)
+   in do
+        modify (\ctx -> ctx {sym_tables = Map.insert new_symbol_table_id parameters (sym_tables ctx), using = new_symbol_table_id})
+        ctx <- get
+        current >>= \case
+          Just c -> do
+            expr <- parse c
+            put ctx {using = 0}
+            return
+              Lambda
+                { expr = expr,
+                  parameters = parameters
+                }
+          Nothing -> error "Current was Nothing3."
+parse Eq = do
   modify (\ctx -> ctx {at = at ctx + 1})
-  return
-    SymbolReference
-      { si = si',
-        st = st'
-      }
+  return Fake
+parse (Literal (Ident i)) =
+  getSymbol i Nothing >>= \case
+    Just (symbol, si', st') -> do
+      modify (\ctx -> ctx {at = at ctx + 1})
+      return
+        SymbolReference
+          { si = si',
+            st = st'
+          }
+    Nothing -> do
+      modify (\ctx -> ctx {at = at ctx + 1})
+      following_expr <-
+        current >>= \case
+          Just c -> parse c
+          Nothing -> error "Current was none4..."
+      return
+        Assignment
+          { left = Literal' (Ident i),
+            right = following_expr,
+            op = 0
+          }
 parse x = error ("Unkown: " ++ show x)
 
 parseAll :: Parser [Expr]
@@ -155,5 +188,8 @@ parseAll = do
   ctx <- get
   current <- current
   case current of
-    Just a -> parse a >> parseAll
+    Just a -> do
+      parsed <- parse a
+      modify (\ctx -> ctx {results = parsed : results ctx, at = at ctx + 1})
+      parseAll
     Nothing -> return (reverse $ results ctx)

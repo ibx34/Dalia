@@ -2,7 +2,7 @@
 
 module Lexer where
 
-import Common (Context (Context, at, using, c_multi_item, input, is_comment, results, sym_tables), Keywords (..), LexerToken (..), Literals (..), Primes (Type), isCurrentMultiItemComment, isWorkingOnMultiItem)
+import Common (Context (Context, last_symbol_table_id, at, using, c_multi_item, input, is_comment, results, sym_tables), Keywords (..), LexerToken (..), Literals (..), Primes (Type), isCurrentMultiItemComment, isWorkingOnMultiItem)
 import Control.Monad (void, when)
 import Control.Monad qualified
 import Control.Monad.State (MonadState (get, put), State, gets, join, modify)
@@ -26,6 +26,7 @@ createLexer a =
     { input = a,
       at = 0,
       results = [],
+      last_symbol_table_id = 0,
       using = 0,
       sym_tables = Map.empty,
       c_multi_item = Nothing,
@@ -84,7 +85,7 @@ pushBack tok = do
 
 lex :: Char -> Lexer [LexerToken]
 lex '!' = pushBack Bang
-lex '+' = pushBack Plus
+lex '+' = pushBack Plus'
 lex '|' = pushBack Pipe
 lex '=' = pushBack Eq
 lex ':' = do
