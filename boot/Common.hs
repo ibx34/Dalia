@@ -5,22 +5,40 @@ import Data.Kind (Type)
 import Data.Map
 import Data.Map qualified as Map
 import Data.Maybe (isJust)
+import Text.Parsec.Token (GenTokenParser (symbol))
+
+-- TODO: when we get to the llvm add a function to convert these into
+-- some llvm type shi
+data PrimitiveType = Int' deriving (Show, Eq)
 
 data Expr
-  = Lambda
-      { symbols :: SymbolTable,
-        expr :: Expr
+  = SymbolReference
+      { st :: Int,
+        si :: Int
       }
-  | Assignment
-      { left :: Expr,
-        right :: Expr
-      }
-  | Reference
-      { id :: Int,
-        symbol_table :: Maybe Int
-      }
-  | Place
+  | PrimitiveType PrimitiveType
   deriving (Show, Eq)
+
+data Symbol = Symbol
+  { name :: String,
+    val :: Maybe Expr,
+    from_lib :: Maybe Int
+  }
+  deriving (Show, Eq)
+
+data SymbolTable = SymbolTable
+  { symbols :: Map Int Symbol,
+    name_to_id :: Map String Int,
+    last_id :: Int,
+    parent :: Maybe Int
+  }
+  deriving (Show, Eq)
+
+getSymbol :: SymbolTable -> Int -> Maybe Symbol
+getSymbol (SymbolTable {symbols}) id = Map.lookup id symbols
+
+getSymbolByName :: SymbolTable -> String -> Maybe Symbol
+getSymbolByName st name = Map.lookup name (name_to_id st) >>= \id -> getSymbol st id
 
 data Keywords = TypeDef deriving (Show, Eq)
 
@@ -55,22 +73,6 @@ data LexerToken
   | SingleQuote
   | DoubleQuote
   | Comment String -- We dont care, probably keep it for later use.
-  deriving (Show, Eq)
-
-data SymbolType = Assignment' | PrimitiveType deriving (Show, Eq)
-
-data SymbolInfo = SymbolInfo
-  { val :: Maybe Expr,
-    name :: String
-  }
-  deriving (Show, Eq)
-
-data SymbolTable = SymbolTable
-  { table :: Map.Map Int SymbolInfo,
-    name_to_id :: Map.Map String Int,
-    next_id :: Int,
-    parent :: Maybe Int
-  }
   deriving (Show, Eq)
 
 data Context i r b = Context

@@ -1,11 +1,10 @@
 {-# LANGUAGE LambdaCase #-}
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
-
 {-# HLINT ignore "Use newtype instead of data" #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
 module Parser where
 
-import Common (Context (Context, at, c_multi_item, input, is_comment, results, sym_tables, using), Expr (Lambda, Place, Reference, expr, id, symbol_table, symbols), Keywords (..), LexerToken (..), Literals (..), Primes (Type), SymbolInfo (SymbolInfo, name, val), SymbolTable (SymbolTable, name_to_id, next_id, parent, table), SymbolType (PrimitiveType), isCurrentMultiItemComment, isWorkingOnMultiItem)
+import Common (Context (Context, at, c_multi_item, input, is_comment, results, sym_tables, using), Expr (PrimitiveType, SymbolReference), Keywords (..), LexerToken (..), Literals (..), Primes (Type), PrimitiveType (Int'), Symbol (Symbol, from_lib, name, val), SymbolTable (SymbolTable, last_id, name_to_id, parent, symbols), isCurrentMultiItemComment, isWorkingOnMultiItem, si, st)
 import Control.Monad (void, when)
 import Control.Monad qualified
 import Control.Monad.State (MonadState (get, put), State, gets, join, modify)
@@ -16,6 +15,8 @@ import Data.Map qualified as Map
 import Data.Maybe (fromMaybe, isJust)
 import Data.Type.Coercion (sym)
 import Distribution.Compat.CharParsing (CharParsing (string))
+import Distribution.Compiler (CompilerFlavor (JHC))
+import Lexer (Lexer)
 import Prelude hiding (lex)
 
 type ParserContext = Common.Context [LexerToken] Expr Expr
@@ -29,26 +30,19 @@ createParser a =
         Map.fromList
           [ ( 0,
               SymbolTable
-                { table =
+                { symbols =
                     Map.fromList
                       [ ( 0,
-                          SymbolInfo
-                            { val = Nothing,
-                              name = "int"
+                          Symbol
+                            { val = Just (PrimitiveType Int'),
+                              name = "int",
+                              from_lib = Nothing
                             }
                         )
                       ],
-                  next_id = 0,
                   name_to_id = Map.fromList [("int", 0)],
+                  last_id = 0,
                   parent = Nothing
-                }
-            ),
-            ( 1,
-              SymbolTable
-                { table = Map.empty,
-                  next_id = 0,
-                  name_to_id = Map.empty,
-                  parent = Just 0
                 }
             )
           ]
@@ -89,111 +83,72 @@ getSymboltable i = do
         Just st -> return st
         Nothing -> error ("Could not find default symbol table, or current symbol\n\n" ++ show (sym_tables ctx))
 
-getSymbol :: String -> Maybe Int -> Parser (SymbolInfo, Int, Int)
+getSymbol :: String -> Maybe Int -> Parser (Symbol, Int, Int)
 getSymbol s st =
-  let symbol_table_id = fromMaybe 0 st
-   in getSymboltable symbol_table_id >>= \current_symbol_table ->
-        case Map.lookup s (name_to_id current_symbol_table) of
-          Just symbol_id -> case Map.lookup symbol_id (table current_symbol_table) of
-            Just symbol -> return (symbol, symbol_id, symbol_table_id)
-            Nothing -> error "TODO!!"
-          Nothing -> do
-            getSymbol
-              s
-              ( case parent current_symbol_table of
-                  Just id -> Just id
-                  Nothing -> error ("Could not find the symbol '" ++ s ++ "'")
-              )
+  get >>= \ctx ->
+    let symbol_table_id = fromMaybe (using ctx) st
+     in getSymboltable symbol_table_id >>= \current_symbol_table ->
+          case Map.lookup s (name_to_id current_symbol_table) of
+            Just symbol_id -> case Map.lookup symbol_id (symbols current_symbol_table) of
+              Just symbol -> return (symbol, symbol_id, symbol_table_id)
+              Nothing -> error "TODO!!"
+            Nothing -> do
+              getSymbol
+                s
+                ( case parent current_symbol_table of
+                    Just id -> Just id
+                    Nothing -> error ("Could not find the symbol '" ++ s ++ "'")
+                )
 
 insertSymbol :: SymbolTable -> String -> Expr -> Parser SymbolTable
-insertSymbol st n e = do
-  return
-    SymbolTable
-      { table =
-          Map.insert
-            (next_id st)
-            SymbolInfo
-              { val = Just e,
-                name = n
-              }
-            (table st),
-        next_id = next_id st + 1,
-        parent = parent st,
-        name_to_id = Map.insert n (next_id st) (name_to_id st)
-      }
-
--- Arguemnt lists are universal ... one big blanket function, yay!
--- make the whole `Maybe LexerToken` nicer? I cant decide if the
--- optioanl value should be handlered her
-parseArgList :: SymbolTable -> Maybe LexerToken -> Parser SymbolTable
-parseArgList a (Just DColon) = do
-  modify (\ctx -> ctx {at = at ctx + 2})
-  current >>= \case
-    Just FunctionArrow ->
-      modify (\ctx -> ctx {at = at ctx + 1})
-  return a
-parseArgList a (Just OpenP) = do
-  modify (\ctx -> ctx {at = at ctx + 1})
-  ctx <- get
-  current <- current
-  inner_arg_list <- parseArgList SymbolTable {table = Map.empty, name_to_id = Map.empty, parent = Nothing, next_id = 0} current
-  error ("Inner arg list: " ++ show inner_arg_list)
-parseArgList a (Just Comma) = do
-  modify (\ctx -> ctx {at = at ctx + 1})
-  ctx <- get
-  current <- current
-  parseArgList a current
-parseArgList st (Just (Literal (Ident i))) = do
-  ctx <- get
-  parse (Literal (Ident i)) >>= \case
-    Just parsed -> do
-      current <- current
-      st' <- insertSymbol st i parsed
-      parseArgList st' current
-    Nothing -> error "BYE BYE"
-parseArgList _ a = do
-  error ("Unexpected Argument " ++ show a)
-
-parse :: LexerToken -> Parser (Maybe Expr)
-parse (Literal (Ident i)) = do
-  modify (\ctx -> ctx {at = at ctx + 1})
-  current >>= \case
-    Just Backslash -> do
-      modify (\ctx -> ctx {at = at ctx + 1})
-      current' <- current
-      -- I call this starting_symbol_table instead of argument list
-      -- smth like that because I have decided that there will be
-      -- no clear disctinction of lambda symbol table and the lambda
-      -- argument list because at the end of the day the arguments
-      -- introducted will have to be in the symbol table to be used.
-      -- error ("Lambda starting symbol table:\n\n" ++ show starting_symbol_table)
-      symbols <- parseArgList SymbolTable {table = Map.empty, name_to_id = Map.empty, parent = Nothing, next_id = 0} current'
-      ctx <- get
-      modify (\ctx -> ctx {at = at ctx + 1})
-      current >>= \case
-        Just c -> do
-          parsed <- parse c
-          return
-            ( Just
-                Lambda
-                  { symbols = symbols,
-                    expr = fromMaybe Place parsed
+insertSymbol st n e =
+  let next_id = last_id st + 1
+   in return
+        SymbolTable
+          { symbols =
+              Map.insert
+                next_id
+                Symbol
+                  { val = Just e,
+                    name = n,
+                    from_lib = Nothing
                   }
-            )
-        _ -> error "WHATEVER"
-    Just (Literal (Ident i)) -> do
-      modify (\ctx -> ctx {at = at ctx + 1})
-      (symbol, id, symbol_table) <- getSymbol i Nothing
-      return
-        ( Just
-            Reference
-              { Common.id = id,
-                symbol_table = Just symbol_table
-              }
-        )
-    a -> do
-      error ("Whatever: " ++ show a)
-parse a = error ("Unkown: " ++ show a)
+                (symbols st),
+            parent = parent st,
+            last_id = next_id,
+            name_to_id = Map.insert n next_id (name_to_id st)
+          }
+
+parseLambdaParameters :: Maybe LexerToken -> SymbolTable -> Parser SymbolTable
+parseLambdaParameters (Just (Literal (Ident i))) st = do
+  modify (\ctx -> ctx {at = at ctx + 1})
+  current >>= \case
+    Just c ->
+      parse c >>= \expr -> do
+        st' <- insertSymbol st i expr
+        current >>= \c -> parseLambdaParameters c st'
+    Nothing -> error "Current was Nothing."
+parseLambdaParameters (Just DColon) st = do
+  modify (\ctx -> ctx {at = at ctx + 1})
+  return st
+parseLambdaParameters (Just Comma) st = do
+  modify (\ctx -> ctx {at = at ctx + 1})
+  current >>= \c -> parseLambdaParameters c st
+
+parse :: LexerToken -> Parser Expr
+parse Backslash = do
+  modify (\ctx -> ctx {at = at ctx + 1})
+  parameters <- current >>= \c -> parseLambdaParameters c SymbolTable {symbols = Map.empty, name_to_id = Map.empty, parent = Nothing, last_id = 0}
+  error (show parameters)
+parse (Literal (Ident i)) = do
+  (symbol, si', st') <- getSymbol i Nothing
+  modify (\ctx -> ctx {at = at ctx + 1})
+  return
+    SymbolReference
+      { si = si',
+        st = st'
+      }
+parse x = error ("Unkown: " ++ show x)
 
 parseAll :: Parser [Expr]
 parseAll = do

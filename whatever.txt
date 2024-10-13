@@ -1,0 +1,84 @@
+-- Arguemnt lists are universal ... one big blanket function, yay!
+-- -- make the whole `Maybe LexerToken` nicer? I cant decide if the
+-- -- optioanl value should be handlered her
+-- parseArgList :: SymbolTable -> Maybe LexerToken -> Parser SymbolTable
+-- parseArgList st (Just Comma) = do
+--   modify (\ctx -> ctx {at = at ctx + 1})
+--   current >>= parseArgList st
+-- parseArgList a (Just DColon) = do
+--   modify (\ctx -> ctx {at = at ctx + 2})
+--   current >>= \case
+--     Just FunctionArrow ->
+--       modify (\ctx -> ctx {at = at ctx + 1})
+--   return a
+-- parseArgList st (Just (Literal (Ident i))) = do
+--   ctx <- get
+--   modify (\ctx -> ctx {at = at ctx + 1})
+--   current >>= \case
+--     Just c ->
+--       parseExpr c >>= \case
+--         Just parsed -> do
+--           st' <- insertSymbol st i parsed
+--           current >>= parseArgList st'
+--         Nothing -> error "BYE BYE"
+--     Nothing -> error "whatever"
+
+-- -- parseArgList st (Just a) = do
+-- --   parse a >>= \case
+-- --     Just parsed -> do
+-- --       current <- current
+-- --       st' <- insertSymbol st i parsed
+-- --       parseArgList st' current
+
+-- -- parseArgList a (Just OpenP) = do
+-- --   modify (\ctx -> ctx {at = at ctx + 1})
+-- --   ctx <- get
+-- --   current <- current
+-- --   inner_arg_list <- parseArgList SymbolTable {table = Map.empty, name_to_id = Map.empty, parent = Nothing, next_id = 0} current
+-- --   error ("Inner arg list: " ++ show inner_arg_list)
+
+-- parseExpr :: LexerToken -> Parser (Maybe Expr)
+-- parseExpr (Literal (Ident i)) = do
+--   modify (\ctx -> ctx {at = at ctx + 1})
+--   current >>= \case
+--     Just Backslash -> do
+--       modify (\ctx -> ctx {at = at ctx + 1})
+--       current' <- current
+--       -- I call this starting_symbol_table instead of argument list
+--       -- smth like that because I have decided that there will be
+--       -- no clear disctinction of lambda symbol table and the lambda
+--       -- argument list because at the end of the day the arguments
+--       -- introducted will have to be in the symbol table to be used.
+--       -- error ("Lambda starting symbol table:\n\n" ++ show starting_symbol_table)
+--       symbols <- parseArgList SymbolTable {table = Map.empty, name_to_id = Map.empty, parent = Nothing, next_id = 0} current'
+--       ctx <- get
+--       modify (\ctx -> ctx {at = at ctx + 1})
+--       current >>= \case
+--         Just c -> do
+--           parsed <- parse c
+--           return
+--             ( Just
+--                 Lambda
+--                   { symbols = symbols,
+--                     expr = fromMaybe Place parsed
+--                   }
+--             )
+--         _ -> error "WHATEVER"
+--     Just (Literal (Ident i)) -> do
+--       modify (\ctx -> ctx {at = at ctx + 1})
+--       (symbol, id, symbol_table) <- getSymbol i Nothing
+--       return
+--         ( Just
+--             Reference
+--               { Common.id = id,
+--                 symbol_table = Just symbol_table
+--               }
+--         )
+--     a -> error "Whatever"
+-- parseExpr a = error ("Unkown: " ++ show a)
+
+-- parse :: LexerToken -> Parser (Maybe Expr)
+-- parse c = do
+--   lhs <- parseExpr c
+--   currented <- current
+--   error ("Current? " ++ show currented)
