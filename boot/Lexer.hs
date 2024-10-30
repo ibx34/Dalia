@@ -2,7 +2,7 @@
 
 module Lexer where
 
-import Common (Context (Context, last_symbol_table_id, at, using, c_multi_item, input, is_comment, results, sym_tables), Keywords (..), LexerToken (..), Literals (..), Primes (Type), isCurrentMultiItemComment, isWorkingOnMultiItem)
+import Common (Context (Context, at, c_multi_item, input, is_comment, last_symbol_table_id, op_stack, results, sym_tables, temp_output, using), Keywords (..), LexerToken (..), Literals (..), Primes (Type), isCurrentMultiItemComment, isWorkingOnMultiItem)
 import Control.Monad (void, when)
 import Control.Monad qualified
 import Control.Monad.State (MonadState (get, put), State, gets, join, modify)
@@ -26,7 +26,9 @@ createLexer a =
     { input = a,
       at = 0,
       results = [],
+      temp_output = [],
       last_symbol_table_id = 0,
+      op_stack = [],
       using = 0,
       sym_tables = Map.empty,
       c_multi_item = Nothing,

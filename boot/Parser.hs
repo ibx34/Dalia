@@ -1,10 +1,12 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE LambdaCase #-}
+{-# OPTIONS_GHC -Wno-deferred-out-of-scope-variables #-}
 {-# HLINT ignore "Use newtype instead of data" #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
 module Parser where
 
-import Common (Context (Context, at, c_multi_item, input, is_comment, last_symbol_table_id, results, sym_tables, using), Expr (Assignment, Fake, Lambda, Literal', PrimitiveType, SymbolReference, expr, left, op, parameters, right), Keywords (..), LexerToken (..), Literals (..), Primes (Type), PrimitiveType (Int'), Symbol (Symbol, from_lib, name, val), SymbolTable (SymbolTable, last_id, name_to_id, parent, symbols), isCurrentMultiItemComment, isWorkingOnMultiItem, si, st)
+import Common (Associativity (Left'), Context (Context, at, c_multi_item, input, is_comment, last_symbol_table_id, op_stack, results, sym_tables, temp_output, using), Expr (SYA, Assignment, Fake, Lambda, Literal', PrimitiveType, SymbolReference, expr, left, op, parameters, right), Keywords (..), LexerToken (..), Literals (..), Operators (Plus), Primes (Type), PrimitiveType (Int'), ShuntingYardAlgoData (SYAExpr, SYAOp), Symbol (Symbol, from_lib, name, val), SymbolTable (SymbolTable, last_id, name_to_id, parent, symbols), isCurrentMultiItemComment, isOp, isWorkingOnMultiItem, ltToOp, opToLt, precedenceAndAssociativity, si, st)
 import Control.Monad (void, when)
 import Control.Monad qualified
 import Control.Monad.State (MonadState (get, put), State, gets, join, modify)
@@ -17,6 +19,8 @@ import Data.Type.Coercion (sym)
 import Distribution.Compat.CharParsing (CharParsing (string))
 import Distribution.Compiler (CompilerFlavor (JHC))
 import Lexer (Lexer)
+import Text.Parsec (token)
+import Text.Parsec.Expr (Operator)
 import Prelude hiding (lex)
 
 type ParserContext = Common.Context [LexerToken] Expr Expr
@@ -35,12 +39,12 @@ createParser a =
                       [ ( 0,
                           Symbol
                             { val = Just (PrimitiveType Int'),
-                              name = "int",
+                              name = Ident "int",
                               from_lib = Nothing
                             }
                         )
                       ],
-                  name_to_id = Map.fromList [("int", 0)],
+                  name_to_id = Map.fromList [(Ident "int", 0)],
                   last_id = 0,
                   parent = Nothing
                 }
@@ -50,6 +54,8 @@ createParser a =
         { input = a,
           at = 0,
           results = [],
+          op_stack = [],
+          temp_output = [],
           last_symbol_table_id = 0,
           using = 0,
           sym_tables = sym_tables,
@@ -84,7 +90,7 @@ getSymboltable i = do
         Just st -> return st
         Nothing -> error ("Could not find default symbol table, or current symbol\n\n" ++ show (sym_tables ctx))
 
-getSymbol :: String -> Maybe Int -> Parser (Maybe (Symbol, Int, Int))
+getSymbol :: Literals -> Maybe Int -> Parser (Maybe (Symbol, Int, Int))
 getSymbol s st =
   get >>= \ctx ->
     let symbol_table_id = fromMaybe (using ctx) st
@@ -98,7 +104,7 @@ getSymbol s st =
                 then return Nothing
                 else getSymbol s (Just (fromMaybe 0 (parent current_symbol_table)))
 
-insertSymbol :: SymbolTable -> String -> Expr -> Parser SymbolTable
+insertSymbol :: SymbolTable -> Literals -> Expr -> Parser SymbolTable
 insertSymbol st n e =
   let next_id = last_id st + 1
    in return
@@ -118,12 +124,12 @@ insertSymbol st n e =
           }
 
 parseLambdaParameters :: Maybe LexerToken -> SymbolTable -> Parser SymbolTable
-parseLambdaParameters (Just (Literal (Ident i))) st = do
+parseLambdaParameters (Just (Literal lit@(Ident i))) st = do
   modify (\ctx -> ctx {at = at ctx + 1})
   current >>= \case
     Just c ->
       parse c >>= \expr -> do
-        st' <- insertSymbol st i expr
+        st' <- insertSymbol st lit expr
         current >>= \c -> parseLambdaParameters c st'
     Nothing -> error "Current was Nothing1."
 parseLambdaParameters (Just DColon) st = do
@@ -131,14 +137,72 @@ parseLambdaParameters (Just DColon) st = do
   current >>= \case
     Just c ->
       parse c >>= \expr -> do
-        st' <- insertSymbol st "ret" expr
+        st' <- insertSymbol st (Ident "ret") expr
         return st
     Nothing -> error "Current was Nothing2."
 parseLambdaParameters (Just Comma) st = do
   modify (\ctx -> ctx {at = at ctx + 1})
   current >>= \c -> parseLambdaParameters c st
 
+safeLast :: [a] -> Parser (Maybe a)
+safeLast [] = return Nothing
+safeLast xs = return (Just (last xs))
+
+shuntingYardAlgo :: Maybe LexerToken -> [Operators] -> [ShuntingYardAlgoData] -> Parser Expr
+shuntingYardAlgo Nothing os oq = return (SYA (oq ++ map SYAOp os))
+shuntingYardAlgo (Just tok) os oq
+  | tok == Dash || tok == Plus' =
+      safeLast os >>= \case
+        Just last ->
+          let (nop_prec, nop_assoc) = precedenceAndAssociativity tok
+              (last_prec, last_assoc) = precedenceAndAssociativity (opToLt last)
+           in case nop_assoc of
+                Left' ->
+                  if last_prec >= nop_prec
+                    then
+                      current >>= \case
+                        Just c ->
+                          let (x : xs) = reverse os
+                           in shuntingYardAlgo (Just c) (ltToOp tok : xs) (SYAOp last : oq)
+                        Nothing -> error "this is as far as it goes1"
+                    else error "WHAT"
+        Nothing ->
+          current >>= \case
+            Just c -> do
+              modify (\ctx -> ctx {at = at ctx + 1})
+              shuntingYardAlgo (Just c) (ltToOp tok : os) oq
+            Nothing -> do
+              ctx <- get
+              error ("!\n\n\t" ++ show ctx ++ "\n\n\t" ++ show os ++ "\n\n\t" ++ show oq)
+  | otherwise = do
+      case tok of
+        (Literal lit) -> do
+          parsed <- parse tok
+          current >>= \c -> shuntingYardAlgo c os (SYAExpr parsed : oq)
+
 parse :: LexerToken -> Parser Expr
+parse tok@(Literal lit) = do
+  getSymbol lit Nothing >>= \case
+    Just (symbol, si', st') -> do
+      modify (\ctx -> ctx {at = at ctx + 1})
+      return SymbolReference {si = si', st = st'}
+    Nothing -> do
+      modify (\ctx -> ctx {at = at ctx + 1})
+      current >>= \case
+        Just c
+          | isOp c -> do
+              parsed_lit <- parse tok
+              shuntingYardAlgo (Just c) [] [SYAExpr parsed_lit]
+          | c == Eq -> do
+              modify (\ctx -> ctx {at = at ctx + 1})
+              following_expr <-
+                current >>= \case
+                  Just c' -> parse c'
+                  Nothing -> error "Current was none4..."
+              return Assignment {left = Literal' lit, right = following_expr, op = 0}
+          | otherwise -> return (Literal' lit)
+        Nothing -> do
+          modify (\ctx -> ctx {at = at ctx + 1}) >> return (Literal' lit)
 parse Backslash = do
   modify (\ctx -> ctx {at = at ctx + 1})
   parameters <- current >>= \c -> parseLambdaParameters c SymbolTable {symbols = Map.empty, name_to_id = Map.empty, parent = Nothing, last_id = 0}
@@ -146,41 +210,19 @@ parse Backslash = do
   let new_symbol_table_id = (last_symbol_table_id ctx + 1)
    in do
         modify (\ctx -> ctx {sym_tables = Map.insert new_symbol_table_id parameters (sym_tables ctx), using = new_symbol_table_id})
-        ctx <- get
         current >>= \case
-          Just c -> do
-            expr <- parse c
-            put ctx {using = 0}
-            return
-              Lambda
-                { expr = expr,
-                  parameters = parameters
-                }
-          Nothing -> error "Current was Nothing3."
-parse Eq = do
-  modify (\ctx -> ctx {at = at ctx + 1})
-  return Fake
-parse (Literal (Ident i)) =
-  getSymbol i Nothing >>= \case
-    Just (symbol, si', st') -> do
-      modify (\ctx -> ctx {at = at ctx + 1})
-      return
-        SymbolReference
-          { si = si',
-            st = st'
-          }
-    Nothing -> do
-      modify (\ctx -> ctx {at = at ctx + 1})
-      following_expr <-
-        current >>= \case
-          Just c -> parse c
-          Nothing -> error "Current was none4..."
-      return
-        Assignment
-          { left = Literal' (Ident i),
-            right = following_expr,
-            op = 0
-          }
+          Just FunctionArrow ->
+            modify (\ctx -> ctx {at = at ctx + 1}) >> current >>= \case
+              Just c -> do
+                expr <- parse c
+                put ctx {using = 0}
+                return
+                  Lambda
+                    { expr = expr,
+                      parameters = parameters
+                    }
+              Nothing -> error "Current was Nothing3."
+          a -> error ("Expected function arrow to follow ret of lambda, instead got: " ++ show a)
 parse x = error ("Unkown: " ++ show x)
 
 parseAll :: Parser [Expr]
