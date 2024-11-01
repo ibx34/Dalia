@@ -1,6 +1,6 @@
 import Common (Context (sym_tables), getSymbol, getSymbolByName)
 import Control.Monad (when)
-import Control.Monad.State (evalState)
+import Control.Monad.State (evalState, runState)
 import Data.Char (isAlpha, isAlphaNum)
 import Data.Map qualified as Map
 import Distribution.Compat.CharParsing (lower)

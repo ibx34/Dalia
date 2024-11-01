@@ -6,10 +6,11 @@
 
 module Parser where
 
-import Common (Associativity (Left'), Context (Context, at, c_multi_item, input, is_comment, last_symbol_table_id, op_stack, results, sym_tables, temp_output, using), Expr (SYA, Assignment, Fake, Lambda, Literal', PrimitiveType, SymbolReference, expr, left, op, parameters, right), Keywords (..), LexerToken (..), Literals (..), Operators (Plus), Primes (Type), PrimitiveType (Int'), ShuntingYardAlgoData (SYAExpr, SYAOp), Symbol (Symbol, from_lib, name, val), SymbolTable (SymbolTable, last_id, name_to_id, parent, symbols), isCurrentMultiItemComment, isOp, isWorkingOnMultiItem, ltToOp, opToLt, precedenceAndAssociativity, si, st)
+import Common (Associativity (Left'), Context (Context, at, c_multi_item, input, is_comment, last_symbol_table_id, op_stack, results, sym_tables, temp_output, using), Expr (Assignment, Fake, Lambda, Literal', PrimitiveType, SYA, SymbolReference, expr, left, op, parameters, right), Keywords (..), LexerToken (..), Literals (..), Operators (Plus), Primes (Type), PrimitiveType (Int'), ShuntingYardAlgoData (SYAExpr, SYAOp), Symbol (Symbol, from_lib, name, val), SymbolTable (SymbolTable, last_id, name_to_id, parent, symbols), isCurrentMultiItemComment, isOp, isWorkingOnMultiItem, ltToOp, opToLt, precedenceAndAssociativity, si, st)
 import Control.Monad (void, when)
 import Control.Monad qualified
 import Control.Monad.State (MonadState (get, put), State, gets, join, modify)
+import Data.Bits (Bits (xor))
 import Data.Bool (bool)
 import Data.Char (isAlphaNum, isNumber)
 import Data.Map (Map)
@@ -148,9 +149,9 @@ safeLast :: [a] -> Parser (Maybe a)
 safeLast [] = return Nothing
 safeLast xs = return (Just (last xs))
 
-shuntingYardAlgo :: Maybe LexerToken -> [Operators] -> [ShuntingYardAlgoData] -> Parser Expr
-shuntingYardAlgo Nothing os oq = return (SYA (oq ++ map SYAOp os))
-shuntingYardAlgo (Just tok) os oq
+shuntingYardAlgo :: String -> Maybe LexerToken -> [Operators] -> [ShuntingYardAlgoData] -> Parser Expr
+shuntingYardAlgo a Nothing os oq = return (SYA (oq ++ map SYAOp os))
+shuntingYardAlgo a (Just tok) os oq
   | tok == Dash || tok == Plus' =
       safeLast os >>= \case
         Just last ->
@@ -163,14 +164,14 @@ shuntingYardAlgo (Just tok) os oq
                       current >>= \case
                         Just c ->
                           let (x : xs) = reverse os
-                           in shuntingYardAlgo (Just c) (ltToOp tok : xs) (SYAOp last : oq)
+                           in shuntingYardAlgo "1" (Just c) (ltToOp tok : xs) (SYAOp last : oq)
                         Nothing -> error "this is as far as it goes1"
                     else error "WHAT"
         Nothing ->
           current >>= \case
             Just c -> do
               modify (\ctx -> ctx {at = at ctx + 1})
-              shuntingYardAlgo (Just c) (ltToOp tok : os) oq
+              shuntingYardAlgo "1" (Just c) (ltToOp tok : os) oq
             Nothing -> do
               ctx <- get
               error ("!\n\n\t" ++ show ctx ++ "\n\n\t" ++ show os ++ "\n\n\t" ++ show oq)
@@ -178,7 +179,7 @@ shuntingYardAlgo (Just tok) os oq
       case tok of
         (Literal lit) -> do
           parsed <- parse tok
-          current >>= \c -> shuntingYardAlgo c os (SYAExpr parsed : oq)
+          current >>= \c -> shuntingYardAlgo "1" c os (SYAExpr parsed : oq)
 
 parse :: LexerToken -> Parser Expr
 parse tok@(Literal lit) = do
@@ -192,7 +193,7 @@ parse tok@(Literal lit) = do
         Just c
           | isOp c -> do
               parsed_lit <- parse tok
-              shuntingYardAlgo (Just c) [] [SYAExpr parsed_lit]
+              shuntingYardAlgo "2" (Just c) [] [SYAExpr parsed_lit]
           | c == Eq -> do
               modify (\ctx -> ctx {at = at ctx + 1})
               following_expr <-
@@ -202,7 +203,8 @@ parse tok@(Literal lit) = do
               return Assignment {left = Literal' lit, right = following_expr, op = 0}
           | otherwise -> return (Literal' lit)
         Nothing -> do
-          modify (\ctx -> ctx {at = at ctx + 1}) >> return (Literal' lit)
+          modify (\ctx -> ctx {at = at ctx + 1})
+          return (Literal' lit)
 parse Backslash = do
   modify (\ctx -> ctx {at = at ctx + 1})
   parameters <- current >>= \c -> parseLambdaParameters c SymbolTable {symbols = Map.empty, name_to_id = Map.empty, parent = Nothing, last_id = 0}
@@ -211,11 +213,12 @@ parse Backslash = do
    in do
         modify (\ctx -> ctx {sym_tables = Map.insert new_symbol_table_id parameters (sym_tables ctx), using = new_symbol_table_id})
         current >>= \case
-          Just FunctionArrow ->
-            modify (\ctx -> ctx {at = at ctx + 1}) >> current >>= \case
+          Just FunctionArrow -> do
+            modify (\ctx -> ctx {at = at ctx + 1})
+            current >>= \case
               Just c -> do
                 expr <- parse c
-                put ctx {using = 0}
+                modify (\ctx -> ctx {using = 0})
                 return
                   Lambda
                     { expr = expr,
