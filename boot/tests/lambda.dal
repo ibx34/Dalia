@@ -1,1 +1,1 @@
-aPrivateSyntaxSugarNamedFunction=\x int, y int :: int → 2 + 1
+one\x int, y int :: int → 2 + 1

@@ -23,6 +23,7 @@ import Lexer (Lexer)
 import Text.Parsec (token)
 import Text.Parsec.Expr (Operator)
 import Prelude hiding (lex)
+import Debug.Trace (trace)
 
 type ParserContext = Common.Context [LexerToken] Expr Expr
 
@@ -124,109 +125,102 @@ insertSymbol st n e =
             name_to_id = Map.insert n next_id (name_to_id st)
           }
 
-parseLambdaParameters :: Maybe LexerToken -> SymbolTable -> Parser SymbolTable
-parseLambdaParameters (Just (Literal lit@(Ident i))) st = do
-  modify (\ctx -> ctx {at = at ctx + 1})
-  current >>= \case
-    Just c ->
-      parse c >>= \expr -> do
-        st' <- insertSymbol st lit expr
-        current >>= \c -> parseLambdaParameters c st'
-    Nothing -> error "Current was Nothing1."
-parseLambdaParameters (Just DColon) st = do
-  modify (\ctx -> ctx {at = at ctx + 1})
-  current >>= \case
-    Just c ->
-      parse c >>= \expr -> do
-        st' <- insertSymbol st (Ident "ret") expr
-        return st
-    Nothing -> error "Current was Nothing2."
-parseLambdaParameters (Just Comma) st = do
-  modify (\ctx -> ctx {at = at ctx + 1})
-  current >>= \c -> parseLambdaParameters c st
+-- parseLambdaParameters :: Maybe LexerToken -> SymbolTable -> Parser SymbolTable
+-- parseLambdaParameters (Just (Literal lit@(Ident i))) st = do
+--   modify (\ctx -> ctx {at = at ctx + 1})
+--   current >>= \case
+--     Just c ->
+--       parse c >>= \expr -> do
+--         st' <- insertSymbol st lit expr
+--         current >>= \c -> parseLambdaParameters c st'
+--     Nothing -> error "Current was Nothing1."
+-- parseLambdaParameters (Just DColon) st = do
+--   modify (\ctx -> ctx {at = at ctx + 1})
+--   current >>= \case
+--     Just c ->
+--       parse c >>= \expr -> do
+--         st' <- insertSymbol st (Ident "ret") expr
+--         return st
+--     Nothing -> error "Current was Nothing2."
+-- parseLambdaParameters (Just Comma) st = do
+--   modify (\ctx -> ctx {at = at ctx + 1})
+--   current >>= \c -> parseLambdaParameters c st
 
-safeLast :: [a] -> Parser (Maybe a)
-safeLast [] = return Nothing
-safeLast xs = return (Just (last xs))
+-- safeLast :: [a] -> Parser (Maybe a)
+-- safeLast [] = return Nothing
+-- safeLast xs = return (Just (last xs))
 
-shuntingYardAlgo :: String -> Maybe LexerToken -> [Operators] -> [ShuntingYardAlgoData] -> Parser Expr
-shuntingYardAlgo a Nothing os oq = return (SYA (oq ++ map SYAOp os))
-shuntingYardAlgo a (Just tok) os oq
-  | tok == Dash || tok == Plus' =
-      safeLast os >>= \case
-        Just last ->
-          let (nop_prec, nop_assoc) = precedenceAndAssociativity tok
-              (last_prec, last_assoc) = precedenceAndAssociativity (opToLt last)
-           in case nop_assoc of
-                Left' ->
-                  if last_prec >= nop_prec
-                    then
-                      current >>= \case
-                        Just c ->
-                          let (x : xs) = reverse os
-                           in shuntingYardAlgo "1" (Just c) (ltToOp tok : xs) (SYAOp last : oq)
-                        Nothing -> error "this is as far as it goes1"
-                    else error "WHAT"
-        Nothing ->
-          current >>= \case
-            Just c -> do
-              modify (\ctx -> ctx {at = at ctx + 1})
-              shuntingYardAlgo "1" (Just c) (ltToOp tok : os) oq
-            Nothing -> do
-              ctx <- get
-              error ("!\n\n\t" ++ show ctx ++ "\n\n\t" ++ show os ++ "\n\n\t" ++ show oq)
-  | otherwise = do
-      case tok of
-        (Literal lit) -> do
-          parsed <- parse tok
-          current >>= \c -> shuntingYardAlgo "1" c os (SYAExpr parsed : oq)
+-- shuntingYardAlgo :: String -> Maybe LexerToken -> [Operators] -> [ShuntingYardAlgoData] -> Parser Expr
+-- shuntingYardAlgo a Nothing os oq = return (SYA (oq ++ map SYAOp os))
+-- shuntingYardAlgo a (Just tok) os oq
+--   | tok == Dash || tok == Plus' =
+--       safeLast os >>= \case
+--         Just last ->
+--           let (nop_prec, nop_assoc) = precedenceAndAssociativity tok
+--               (last_prec, last_assoc) = precedenceAndAssociativity (opToLt last)
+--            in if last_prec >= nop_prec && nop_assoc == Left'
+--                 then
+--                   current >>= \case
+--                     Just c ->
+--                       let (x : xs) = reverse os
+--                        in shuntingYardAlgo "1" (Just c) (ltToOp tok : xs) (SYAOp last : oq)
+--                     Nothing -> return $ SYA (oq ++ map SYAOp os)
+--                 else error "Infix parsing ended unexpectedly"
+--         Nothing ->
+--           current >>= \case
+--             Just c -> do
+--               modify (\ctx -> ctx {at = at ctx + 1})
+--               shuntingYardAlgo "1" (Just c) (ltToOp tok : os) oq
+--             Nothing -> return $ SYA (oq ++ map SYAOp os)
+--   | otherwise = do
+--       -- Other cases handle literals and expressions directly
+--       case tok of
+--         (Literal lit) -> do
+--           parsed <- parse tok
+--           modify (\ctx -> ctx {at = at ctx + 1})
+--           current >>= \c -> shuntingYardAlgo "1" c os (SYAExpr parsed : oq)
 
-parse :: LexerToken -> Parser Expr
-parse tok@(Literal lit) = do
-  getSymbol lit Nothing >>= \case
-    Just (symbol, si', st') -> do
-      modify (\ctx -> ctx {at = at ctx + 1})
-      return SymbolReference {si = si', st = st'}
-    Nothing -> do
-      modify (\ctx -> ctx {at = at ctx + 1})
-      current >>= \case
-        Just c
-          | isOp c -> do
-              parsed_lit <- parse tok
-              shuntingYardAlgo "2" (Just c) [] [SYAExpr parsed_lit]
-          | c == Eq -> do
-              modify (\ctx -> ctx {at = at ctx + 1})
-              following_expr <-
-                current >>= \case
-                  Just c' -> parse c'
-                  Nothing -> error "Current was none4..."
-              return Assignment {left = Literal' lit, right = following_expr, op = 0}
-          | otherwise -> return (Literal' lit)
-        Nothing -> do
-          modify (\ctx -> ctx {at = at ctx + 1})
-          return (Literal' lit)
-parse Backslash = do
-  modify (\ctx -> ctx {at = at ctx + 1})
-  parameters <- current >>= \c -> parseLambdaParameters c SymbolTable {symbols = Map.empty, name_to_id = Map.empty, parent = Nothing, last_id = 0}
-  ctx <- get
-  let new_symbol_table_id = (last_symbol_table_id ctx + 1)
-   in do
-        modify (\ctx -> ctx {sym_tables = Map.insert new_symbol_table_id parameters (sym_tables ctx), using = new_symbol_table_id})
-        current >>= \case
-          Just FunctionArrow -> do
-            modify (\ctx -> ctx {at = at ctx + 1})
-            current >>= \case
-              Just c -> do
-                expr <- parse c
-                modify (\ctx -> ctx {using = 0})
-                return
-                  Lambda
-                    { expr = expr,
-                      parameters = parameters
-                    }
-              Nothing -> error "Current was Nothing3."
-          a -> error ("Expected function arrow to follow ret of lambda, instead got: " ++ show a)
-parse x = error ("Unkown: " ++ show x)
+-- parse :: LexerToken -> Parser Expr
+-- parse tok@(Literal lit) = do
+--   getSymbol lit Nothing >>= \case
+--     Just (symbol, si', st') -> do
+--       modify (\ctx -> ctx {at = at ctx + 1})
+--       return SymbolReference {si = si', st = st'}
+--     Nothing -> do
+--       modify (\ctx -> ctx {at = at ctx + 1})
+--       current >>= \case
+--         Just c
+--           | c == Eq -> do
+--               modify (\ctx -> ctx {at = at ctx + 1})
+--               following_expr <-
+--                 current >>= \case
+--                   Just c' -> parse c'
+--                   Nothing -> error "Current was none4..."
+--               return Assignment {left = Literal' lit, right = following_expr, op = 0}
+--           | otherwise -> return (Literal' lit)
+--         Nothing -> return (Literal' lit)
+-- parse Backslash = do
+--   modify (\ctx -> ctx {at = at ctx + 1})
+--   parameters <- current >>= \c -> parseLambdaParameters c SymbolTable {symbols = Map.empty, name_to_id = Map.empty, parent = Nothing, last_id = 0}
+--   ctx <- get
+--   let new_symbol_table_id = (last_symbol_table_id ctx + 1)
+--    in do
+--         modify (\ctx -> ctx {sym_tables = Map.insert new_symbol_table_id parameters (sym_tables ctx), using = new_symbol_table_id})
+--         current >>= \case
+--           Just FunctionArrow -> do
+--             modify (\ctx -> ctx {at = at ctx + 1})
+--             current >>= \case
+--               Just c -> do
+--                 expr <- parse c
+--                 modify (\ctx -> ctx {using = 0})
+--                 return
+--                   Lambda
+--                     { expr = expr,
+--                       parameters = parameters
+--                     }
+--               Nothing -> error "Current was Nothing3."
+--           a -> error ("Expected function arrow to follow ret of lambda, instead got: " ++ show a)
+-- parse x = error ("Unkown: " ++ show x)
 
 parseAll :: Parser [Expr]
 parseAll = do
