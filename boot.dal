@@ -1,1 +1,3 @@
-one\x int, y int :: int → x + y
+one\a int, b int :: int → a + b
+
+two\d int, e int, f int :: int → d + e - f
