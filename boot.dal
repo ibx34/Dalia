@@ -1,3 +1,3 @@
-one\a int, b int :: int → a + b
+one\a int, b int :: int → "WHAT"
 
 two\d int, e int, f int :: int → d + e - f
