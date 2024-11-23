@@ -447,19 +447,20 @@ class Parser(Cursor):
                 if expr is None or not isinstance(expr, Parameter):
                     self.at -= 1
                     break
-
             body = self.parse()
             if body is None:
                 raise Exception(f"Lambda must have body {self.current()}")
             popped = self.results.pop()
             if not isinstance(popped, Identifier):
                 return popped
-
+            
+            self.using_st = 0
             result = Assignment(
                 self.current_number_of_advances,
                 popped,
                 Lambda(self.current_number_of_advances, lambda_symbol_table, body),
             )
+        
         # At this point, past previous parsing, we should have advanced past
         # the last token and now be face-to-face with the rare, elusive, OP!
         c = self.current()
