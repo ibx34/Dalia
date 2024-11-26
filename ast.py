@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from os import read
-import sys
+import re
 from enum import Enum, auto
 from typing import Generic, Callable, TypeVar
 
@@ -8,6 +8,7 @@ from typing import Generic, Callable, TypeVar
 class PrimitiveTypes(Enum):
     INT = 0
     STR = 1
+    FLOAT = 2
 
 
 class TT(Enum):
@@ -93,14 +94,14 @@ class Lexer(Cursor):
 
     def collect_until(
         self,
-        check: Callable[[str], bool],
+        check: Callable[[str | None, str], bool],
         devance_b4_break: bool = False,
         start_str: str = "",
     ) -> str:
         temp_str = start_str
         while True:
             c = self.current()
-            if check(c):
+            if check(c, temp_str):
                 if devance_b4_break:
                     self.at -= 1
                 break
@@ -117,13 +118,30 @@ class Lexer(Cursor):
             return Token(TT.DOUBLE_COLON)
         elif c == '"':
             self.advance()
-            string = self.collect_until(lambda c: (c is None) or c == '"')
+            string = self.collect_until(lambda c, _: (c is None) or c == '"')
             return Token(TT.LITERAL, prim_ty=PrimitiveTypes.STR, val=string)
-        elif c not in TT and is_valid_ident(c):
+        elif c not in TT and (is_valid_ident(c) or c == "."):
             self.advance()
-            ident = self.collect_until(
-                lambda c: (c is None) or (not is_valid_ident(c)), True, start_str=c
-            )
+
+            def identifier_check(c: str | None, rest: str) -> bool:
+                if (c is None) or (not is_valid_ident(c)) and c != ".":
+                    return True
+                return False
+
+            ident = self.collect_until(identifier_check, True, start_str=c)
+            if "." in ident:
+                try:
+                    [integer, fractional] = ident.split(".")
+                    integer = abs(integer)
+
+                    print(f"{integer}.{fractional}")
+                except ValueError:
+                    raise Exception(
+                        f'Something went wrong handling decimal: "{ident}"? check how many dots...'
+                    )
+
+            # if re.match(r"^-?\d+(\.\d+)?$", ident):
+            #     return Token(TT.LITERAL, val=ident, prim_ty=PrimitiveTypes.FLOAT)
             return Token(TT.IDENT, val=ident)
         else:
             return Token(TT(c))
@@ -167,7 +185,6 @@ class Symbol:
         self.val = val
         self.belongs_to = belongs_to
         self.id = id
-
     def __repr__(self) -> str:
         return f'Symbol "{self.name}", value = {self.val}. Belongs to = {self.belongs_to}. ID = {self.id}'
 
@@ -285,9 +302,7 @@ class Parameter(Expr):
 
 
 class Literal(Expr):
-    def __init__(
-        self, num_of_advances: int, literal_ty: Expr, val: any
-    ) -> None:
+    def __init__(self, num_of_advances: int, literal_ty: Expr, val: any) -> None:
         super().__init__(num_of_advances)
         self.literal_ty = literal_ty
         self.val = val
@@ -313,6 +328,7 @@ class Parser(Cursor):
         # TODO: we are waiting for typedef!
         global_symbols.insert("int", PrimitiveType(0, PrimitiveTypes.INT))
         global_symbols.insert("str", PrimitiveType(0, PrimitiveTypes.STR))
+        global_symbols.insert("float", PrimitiveType(0, PrimitiveTypes.FLOAT))
 
         self.symbol_tables: dict[int, SymbolTable] = {0: global_symbols}
         self.using_st: int = 0
@@ -453,14 +469,14 @@ class Parser(Cursor):
             popped = self.results.pop()
             if not isinstance(popped, Identifier):
                 return popped
-            
+
             self.using_st = 0
             result = Assignment(
                 self.current_number_of_advances,
                 popped,
                 Lambda(self.current_number_of_advances, lambda_symbol_table, body),
             )
-        
+
         # At this point, past previous parsing, we should have advanced past
         # the last token and now be face-to-face with the rare, elusive, OP!
         c = self.current()
