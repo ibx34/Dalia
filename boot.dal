@@ -1,3 +1,1 @@
-one\a int, b int :: int → 2.32
-
-two\d int, e int, f int :: int → d + e - f
+return_float\ :: float → 2.32

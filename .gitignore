@@ -5,3 +5,4 @@ Main.o
 Main
 *.o
 *.hi
+__pycache__

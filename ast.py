@@ -129,19 +129,71 @@ class Lexer(Cursor):
                 return False
 
             ident = self.collect_until(identifier_check, True, start_str=c)
+
             if "." in ident:
                 try:
-                    [integer, fractional] = ident.split(".")
-                    integer = abs(integer)
+                    number = float(ident)
+                    sign = 0 if number >= 0 else 1
 
-                    print(f"{integer}.{fractional}")
+                    number = abs(number)
+                    integer = int(number)
+                    fractional = number - integer
+                    integer_bin = (
+                        bin(integer).replace("0b", "") if integer != 0 else "0"
+                    )
+
+                    frac_bin = []  # List to store the fractional binary digits
+                    while (
+                        fractional and len(frac_bin) < 23 + 3
+                    ):  # Stop after 23+3 bits to avoid overflow
+                        fractional *= 2  # Multiply by 2 to shift digits left
+                        bit = int(fractional)  # Extract the integer part (0 or 1)
+                        frac_bin.append(str(bit))  # Append the bit to the list
+                        fractional -= (
+                            bit  # Remove the integer part from the fractional value
+                        )
+                    frac_bin = "".join(frac_bin)
+                    combined_bin = integer_bin + "." + frac_bin
+
+                    if (
+                        "1" in combined_bin
+                    ):  # Ensure there is at least one significant bit
+                        first_one = combined_bin.index(
+                            "1"
+                        )  # Find the position of the first '1'
+                        if "." in combined_bin and first_one > combined_bin.index("."):
+                            first_one -= (
+                                1  # Adjust for the position of the binary point
+                            )
+                        exponent = (
+                            len(integer_bin) - 1 - first_one
+                        )  # Calculate the exponent from normalization
+                        mantissa = (integer_bin + frac_bin)[
+                            first_one + 1 : first_one + 24
+                        ]  # Extract mantissa bits
+                    else:  # Special case for zero-like numbers
+                        exponent = 0
+                        mantissa = "0" * 23  # Mantissa is all zeros
+
+                    # Step 4: Encode the exponent (add bias of 127)
+                    exponent += 127  # Apply the bias to the exponent
+                    exponent_bin = (
+                        bin(exponent).replace("0b", "").zfill(8)
+                    )  # Convert to 8-bit binary
+
+                    # Step 5: Pad the mantissa to 23 bits
+                    mantissa = mantissa.ljust(
+                        23, "0"
+                    )  # Ensure the mantissa has exactly 23 bits
+
+                    # Combine the components into a 32-bit IEEE 754 representation
+                    ieee754 = f"{sign}{exponent_bin}{mantissa}"
+                    return Token(TT.LITERAL, val=ieee754, prim_ty=PrimitiveTypes.FLOAT)
                 except ValueError:
                     raise Exception(
                         f'Something went wrong handling decimal: "{ident}"? check how many dots...'
                     )
 
-            # if re.match(r"^-?\d+(\.\d+)?$", ident):
-            #     return Token(TT.LITERAL, val=ident, prim_ty=PrimitiveTypes.FLOAT)
             return Token(TT.IDENT, val=ident)
         else:
             return Token(TT(c))
@@ -171,7 +223,9 @@ def get_op(possible_op: Token | None) -> tuple[str, dict[str, int]] | None:
 
 def check_is_allowed(expr: Expr | None) -> bool:
     allowed = expr is not None or (
-        isinstance(expr, Parenthesized) or isinstance(expr, Reference)
+        isinstance(expr, Parenthesized)
+        or isinstance(expr, Reference)
+        or isinstance(expr, Literal)
     )
     if expr is not None and isinstance(expr, Identifier) and expr.for_assignment:
         allowed = False
@@ -185,6 +239,7 @@ class Symbol:
         self.val = val
         self.belongs_to = belongs_to
         self.id = id
+
     def __repr__(self) -> str:
         return f'Symbol "{self.name}", value = {self.val}. Belongs to = {self.belongs_to}. ID = {self.id}'
 
@@ -218,8 +273,9 @@ class SymbolTable:
         return f"{self.symbols}"
 
 
+# Tuple as well as (<expr>)?
 class Parenthesized(Expr):
-    def __init__(self, num_of_advances: int, inner: Expr) -> None:
+    def __init__(self, num_of_advances: int, inner: Expr = None) -> None:
         super().__init__(num_of_advances)
         self.inner = inner
 
@@ -249,6 +305,15 @@ class Identifier(Expr):
 
     def __repr__(self) -> str:
         return f"Ident({self.value})"
+
+
+class Tuple(Expr):
+    def __init__(self, num_of_advances: int, values: list[Expr]) -> None:
+        super().__init__(num_of_advances)
+        self.values = values
+
+    def __repr__(self) -> str:
+        return f"Tuple({self.values})"
 
 
 class TypeDef(Expr):
@@ -411,25 +476,42 @@ class Parser(Cursor):
         elif c.ty == TT.OPEN_PAREN:
             self.advance()
             the_between: list[Expr] = []
-            tuple: bool = False
+            has_comma: bool = False
             while True:
                 c = self.current()
                 if c is not None:
                     if c.ty == TT.CLOSE_PAREN:
                         self.advance()
                         break
+                    elif c.ty == TT.COMMA:
+                        self.advance()
+                        has_comma = True
+                        continue
+
                 expr = self.parse()
                 if expr is None:
                     self.at -= 1
                     break
                 the_between.append(expr)
-
-            if tuple:
-                raise Exception("TODO!1")
-            elif len(the_between) == 0:
-                raise Exception("TODO!2")
+            if len(the_between) == 0:
+                # We init Parenthesized with no expression so
+                # that it is treated as an empty tuple, non value
+                # or dead value. Its just a placeholder ig?
+                result = Parenthesized(self.current_number_of_advances)
             elif len(the_between) == 1:
+                # Init Parenthesized with an expression (the_between[0])
+                # to do exactly what it says... for example (\ :: int ...)
                 result = Parenthesized(self.current_number_of_advances, the_between[0])
+            elif len(the_between) > 1 and has_comma:
+                # Handle tuples
+                result = Tuple(self.current_number_of_advances, the_between)
+
+            # TODO: handle all function call arg parsing
+            # function calls can use () but are not required
+            # all this should be handled down where the
+            # infix operators are but check if the previous
+            # expression was a reference, or fn def and
+            # then match arguments with arguments.
         elif c.ty == TT.BACKSLASH:
             self.advance()
             symbol_table_id = list(self.symbol_tables.items())[-1][0] + 1
@@ -446,7 +528,7 @@ class Parser(Cursor):
                     elif c.ty == TT.DOUBLE_COLON:
                         self.advance()
                         ret_type = self.parse()
-                        if ret_type is None or not isinstance(ret_type, Reference):
+                        if ret_type is None:
                             raise Exception(
                                 f"Return type was not there or non identifier ({ret_type})"
                             )
