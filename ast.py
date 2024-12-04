@@ -25,10 +25,12 @@ class TT(Enum):
     OPEN_PAREN = "("
     CLOSE_PAREN = ")"
     OPEN_SQUARE = "["
+    PIPE = "|"
     CLOSE_SQUARE = "]"
     IDENT = "IDENT"
     LITERAL = "LITERAL"
     COMMENT = "COMMENT"
+    PRIME_FORM = "PRIME_FORM"
 
 
 operators = {
@@ -147,6 +149,9 @@ class Lexer(Cursor):
             return Token(TT.LITERAL, prim_ty=PrimitiveTypes.STR, val=string)
         elif c not in TT and (is_valid_ident(c) or c == "."):
             self.advance()
+            if (next := self.current()) and next == "'" and c == "d":
+                # self.advance()
+                return Token(TT.PRIME_FORM)
 
             def identifier_check(c: str | None, rest: str) -> bool:
                 if (c is None) or (not is_valid_ident(c)) and c != ".":
@@ -436,9 +441,17 @@ class Parser(Cursor):
         self.current_number_of_advances = 0
         self.already_parsing_sya = False
 
+    def resolve_type(self, ty: Expr) -> None:
+        pass
+
     def advance(self) -> None:
         self.current_number_of_advances += 1
         return super().advance()
+
+    def peek(self, amt: int = 1) -> Token | None:
+        if self.at + amt > len(self.input):
+            return None
+        return self.input[self.at + amt]
 
     def lookup(self, name: str, symbol_table_id: int | None = None) -> Symbol | None:
         symbol_table_id = self.using_st if symbol_table_id is None else symbol_table_id
@@ -465,6 +478,42 @@ class Parser(Cursor):
         result: Expr | None = None
         if c is None:
             result = None
+        elif c.ty == TT.PRIME_FORM:
+            self.advance()
+            if (next := self.current()) and next.ty != TT.IDENT:
+                raise Exception(
+                    f"Expected double colon after the prime form...got {next}"
+                )
+            ident = self.parse()
+            self.advance()
+            parts: list[Expr] = []
+            print(f"{self.current()}")
+            while True:
+                c = self.current()
+                print(c)
+                if c is None:
+                    break
+                elif c.ty == TT.PIPE:
+                    self.advance()
+                    continue
+                part = self.parse()
+                if (
+                    not isinstance(part, Tuple)
+                    and not isinstance(part, Reference)
+                    and not isinstance(part, PrimitiveType)
+                    and (
+                        not isinstance(part, Identifier)
+                        or (isinstance(part, Identifier) and part.for_assignment)
+                    )
+                ):
+                    self.at -= 1
+                    break
+                parts.append(part)
+                continue
+
+            print(f"Handling prime form!! {ident} = {parts}")
+            result = TypeDef(ident)
+            
         elif c.ty == TT.LITERAL:
             if c.prim_ty is None or c.val is None:
                 raise Exception("Invalid primitive type...how?")
