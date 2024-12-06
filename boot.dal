@@ -1,7 +1,7 @@
 // Enums are super simple!
-d'Option :: Some | Empty
+d'Option :: Some(a) | Empty
 
-return_float\ x int :: float → 2.32
+return_float\ x int :: float → Some(2.32)
 
 // Who is whatever and why are we doing them...?
 

@@ -312,7 +312,6 @@ class SymbolTable:
         return f"{self.symbols}"
 
 
-# Tuple as well as (<expr>)?
 class Parenthesized(Expr):
     def __init__(self, inner: Expr = None, ty: Expr = None) -> None:
         super().__init__(ty)
@@ -351,14 +350,9 @@ class Tuple(Expr):
         return f"Tuple({self.values})"
 
 
-class TypeDef(Expr):
-    # TODO: should name be Identifier?
-    def __init__(self, name: Expr) -> None:
-        super().__init__()
-        self.name = name
-
+class Parameter(Expr):
     def __repr__(self) -> str:
-        return f"TypeDef(N={self.name})"
+        return f"Parameter"
 
 
 class Lambda(Expr):
@@ -420,6 +414,38 @@ class PrimitiveType(Expr):
 
     def __repr__(self) -> str:
         return f"PrimitiveType(I={self.inner})"
+
+
+class DataVariantWithInnerValue(Expr):
+    def __init__(self, name: Expr, inner_value: Expr) -> None:
+        super().__init__(ty=inner_value)
+        self.inner_value = inner_value
+        self.name = name
+
+    def __repr__(self) -> str:
+        return f"DataVariantWithInnerValue(NAME={self.name}, IV={self.inner_value})"
+
+
+"""
+d'Custom_data_type :: int
+d'Custom_data_type :: str
+d'Custom_data_type :: float
+d'Custom_data_type :: ()
+d'Custom_data_type :: OneVariant
+d'Custom_data_type :: OneVariant | TwoVariant
+d'Custom_data_type :: VariantWithData(int)
+d'Option :: Some(int) | None
+"""
+
+
+class CustomDataType(Expr):
+    def __init__(self, name: Expr, dt: list[Expr]) -> None:
+        super().__init__(ty=dt)
+        self.dt = dt
+        self.name = name
+
+    def __repr__(self) -> str:
+        return f"CustomDataType(_)"
 
 
 class Parser(Cursor):
@@ -487,10 +513,8 @@ class Parser(Cursor):
             ident = self.parse()
             self.advance()
             parts: list[Expr] = []
-            print(f"{self.current()}")
             while True:
                 c = self.current()
-                print(c)
                 if c is None:
                     break
                 elif c.ty == TT.PIPE:
@@ -501,6 +525,7 @@ class Parser(Cursor):
                     not isinstance(part, Tuple)
                     and not isinstance(part, Reference)
                     and not isinstance(part, PrimitiveType)
+                    and not isinstance(part, DataVariantWithInnerValue)
                     and (
                         not isinstance(part, Identifier)
                         or (isinstance(part, Identifier) and part.for_assignment)
@@ -508,12 +533,11 @@ class Parser(Cursor):
                 ):
                     self.at -= 1
                     break
+
                 parts.append(part)
-                continue
 
             print(f"Handling prime form!! {ident} = {parts}")
-            result = TypeDef(ident)
-            
+            result = CustomDataType(ident, parts)
         elif c.ty == TT.LITERAL:
             if c.prim_ty is None or c.val is None:
                 raise Exception("Invalid primitive type...how?")
@@ -540,6 +564,11 @@ class Parser(Cursor):
                     if expr is not None and isinstance(expr, Reference):
                         sym_table.insert(c.val, expr)
                         result = Parameter()
+                elif next.ty is TT.OPEN_PAREN:
+                    self.advance()
+                    paren = self.parse()
+                    # raise Exception(f"Enum value(?): {c.val} -> {paren}")
+                    result = DataVariantWithInnerValue(Identifier(c.val), paren)
                 else:
                     self.advance()
                     for_assignment = False
