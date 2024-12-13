@@ -536,7 +536,6 @@ class Parser(Cursor):
 
                 parts.append(part)
 
-            print(f"Handling prime form!! {ident} = {parts}")
             result = CustomDataType(ident, parts)
         elif c.ty == TT.LITERAL:
             if c.prim_ty is None or c.val is None:
