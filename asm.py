@@ -1,4 +1,4 @@
-from ast import Cursor, Expr, Token # type: ignore
+from ast import Assignment, Cursor, Expr, Identifier, Lambda, Token # type: ignore
 
 
 class ASM(Cursor):
@@ -8,5 +8,11 @@ class ASM(Cursor):
 
     def generate(self) -> None:
         c_expr = self.current()
+        if isinstance(c_expr, Assignment) and isinstance(c_expr.left, Identifier):
+            name = c_expr.left.value
+            if isinstance(c_expr.right, Lambda):
+                print(f"Handling lambda assignment {c_expr.left}.")
+                self.lines.append(f"{name}:")
+                return None
         print(f"!! {c_expr}")
         return None
