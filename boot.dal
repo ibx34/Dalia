@@ -1,7 +1,7 @@
 // return_float\ x int :: float → 2.32
-return_int\ x int :: int → 2
+take_int_and_add_2\ x int :: int → x + 2
 
 // Who is whatever and why are we doing them...?
 
 // do_whatever\ :: (float, int) → (3.32, 54)
-main\ :: int → return_int(2)
+main\ :: int → take_int_and_add_2 2

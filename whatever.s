@@ -7,19 +7,31 @@
 .global _start             // Provide program starting address to linker
 .p2align 3 // Feedback from Peter
 
+_return_int:
+add X1, X0, 2
+mov X0, X1
+
+ret
+
 _start:
+    mov X0, 2
+    bl _return_int // This take the 2 from X0 and adds 2 to it
+    cmp X0, 4 // We want to check if the rseult from _return_in 
+             // is eq to 4
+    b.eq print_hello_world
+
     mov     X0, #0      // Use 0 return code
     mov     X16, #1     // Service command code 1 terminates this program
     svc     0           // Call MacOS to terminate the program
 
 // Setup the parameters to print hello world
 // and then call Linux to do it.
-; print_hello_world: mov X0, #1     // 1 = StdOut
-;         adr X1, helloworld // string to print
-;         mov X2, #13  // length of our string
-;         mov X16, #4     // MacOS write system call
-;         svc 0     // Call linux to output the string
-;         ret
+print_hello_world: mov X0, #1     // 1 = StdOut
+        adr X1, helloworld // string to print
+        mov X2, #13  // length of our string
+        mov X16, #4     // MacOS write system call
+        svc 0     // Call linux to output the string
+        ret
 
 ; print_goodbye: mov X0, #1     // 1 = StdOut
 ;         adr X1, goodbyeworld // string to print
@@ -56,4 +68,3 @@ mov X0, #1     // 1 = StdOut
 // and then call Linux to do it.
 
 helloworld:      .ascii  "Hello World!\n" // 13
-goodbyeworld:   .ascii "Good World!\n" // 13
