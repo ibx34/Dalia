@@ -235,6 +235,7 @@ class Expr(ABC):
         super().__init__()
         self.ty = ty
 
+
 # E = TypeVar("E", bound="Expr")
 
 # class Expr(ABC):
@@ -364,11 +365,6 @@ class ShuntingYardAlgorithmResults(Expr):
         return f"ShuntingYardAlgorithmResults({self.results}, ops={self.oeprators})"
 
 
-class Application(Expr):
-    def __init__(self):
-        super().__init__(PrimitiveTypes.UNIT)
-
-
 class Identifier(Expr):
     def __init__(self, value: str, for_assignment: bool = False) -> None:
         super().__init__(PrimitiveTypes.UNIT)
@@ -487,6 +483,16 @@ class CustomDataType(Expr):
 
     def __repr__(self) -> str:
         return f"CustomDataType(_)"
+
+
+class Application(Expr):
+    def __init__(self, lambda_ref: Reference, parameters: list[Expr]):
+        super().__init__(PrimitiveTypes.UNIT)
+        self.lambda_ref = lambda_ref
+        self.parameters = parameters
+
+    def __repr__(self) -> str:
+        return f"Application(Ref={self.lambda_ref}, P={self.parameters})"
 
 
 class Parser(Cursor):
@@ -715,7 +721,6 @@ class Parser(Cursor):
             and len(self.symbol_tables) > result.belongs_to >= 0
             # and c is not None
         ):
-            print("!")
             st = self.symbol_tables[result.belongs_to]
             symbol = st.lookup_by_id(result.symbol_id)
             if symbol is None:
@@ -723,7 +728,6 @@ class Parser(Cursor):
             if isinstance(symbol.val, Lambda):
                 parameters = symbol.val.parameters
                 p_len = len(parameters.symbols.keys())
-                print(f"!! {p_len}")
 
                 # if its 1 then it HAS to be the return type...right?
                 # we can pass on doing anything. Leave the reference
@@ -749,7 +753,6 @@ class Parser(Cursor):
                         ):
                             break
                         possible_arg = self.parse()
-                        print(f"{possible_arg.ty.ty} == {type_symbol.val.ty}")
                         if possible_arg.ty.ty != type_symbol.val.ty:
                             raise Exception(
                                 f"{bcolors.FAIL}{bcolors.BOLD}Type mismatch{bcolors.ENDC}"
@@ -769,7 +772,10 @@ class Parser(Cursor):
                         self.current_number_of_advances = 0
                         return result
 
-                    print(f"possible args: {possible_args}")
+                    return Application(
+                        Reference(symbol.name, symbol.belongs_to, symbol.id, False),
+                        possible_args,
+                    )
         possible_op = get_op(c)
         if not check_is_allowed(result) or result is None or self.already_parsing_sya:
             return result
