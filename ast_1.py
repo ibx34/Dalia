@@ -235,7 +235,6 @@ class Expr(ABC):
         super().__init__()
         self.ty = ty
 
-
 # E = TypeVar("E", bound="Expr")
 
 # class Expr(ABC):
@@ -364,9 +363,11 @@ class ShuntingYardAlgorithmResults(Expr):
     def __repr__(self) -> str:
         return f"ShuntingYardAlgorithmResults({self.results}, ops={self.oeprators})"
 
+
 class Application(Expr):
     def __init__(self):
         super().__init__(PrimitiveTypes.UNIT)
+
 
 class Identifier(Expr):
     def __init__(self, value: str, for_assignment: bool = False) -> None:
@@ -439,7 +440,7 @@ class Parameter(Expr):
 
 
 class Literal(Expr):
-    def __init__(self, literal_ty: Expr, val: any) -> None:
+    def __init__(self, literal_ty: PrimitiveTypes, val: any) -> None:
         super().__init__(literal_ty)
         self.val = val
 
@@ -450,10 +451,10 @@ class Literal(Expr):
 class PrimitiveType(Expr):
     def __init__(self, inner: PrimitiveTypes) -> None:
         super().__init__(inner)
-        self.inner = inner
+        self.val = inner
 
     def __repr__(self) -> str:
-        return f"PrimitiveType(I={self.inner})"
+        return f"PrimitiveType(I={self.val})"
 
 
 class DataVariantWithInnerValue(Expr):
@@ -748,17 +749,15 @@ class Parser(Cursor):
                         ):
                             break
                         possible_arg = self.parse()
-                        if isinstance(
-                            possible_arg.ty.val, PrimitiveType
-                        ) and isinstance(type_symbol.val, PrimitiveType):
-                            if possible_arg.ty.val != type_symbol.val:
-                                raise Exception(
-                                    f"{bcolors.FAIL}{bcolors.BOLD}Type mismatch{bcolors.ENDC}"
-                                )
+                        print(f"{possible_arg.ty.ty} == {type_symbol.val.ty}")
+                        if possible_arg.ty.ty != type_symbol.val.ty:
+                            raise Exception(
+                                f"{bcolors.FAIL}{bcolors.BOLD}Type mismatch{bcolors.ENDC}"
+                            )
                         elif (
                             possible_arg is None
                             or possible_arg.ty is None
-                            or not isinstance(possible_arg.ty, Symbol)
+                            # or not isinstance(possible_arg.ty, Symbol)
                         ):
                             raise Exception(
                                 f"Null type? 1. {possible_arg is None} 2. {possible_arg.ty is None} 3. {not isinstance(possible_arg.ty, Symbol)} {bcolors.OKCYAN}{bcolors.BOLD}({possible_arg.ty}){bcolors.ENDC}"
