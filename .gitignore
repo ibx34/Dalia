@@ -6,3 +6,4 @@ Main
 *.o
 *.hi
 __pycache__
+whatever
