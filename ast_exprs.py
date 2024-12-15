@@ -1,6 +1,6 @@
 from abc import ABC
-from common import TT, PrimitiveTypes, bcolors, operators
-from typing import Type, Any, Union
+from common import PrimitiveTypes, bcolors
+from typing import Any, Union
 
 class AstirExpr(ABC):
     def __init__(self, ty: Union['PrimitiveTypes', 'AstirExpr']):

@@ -1,9 +1,6 @@
-from abc import ABC, abstractmethod
-from ast import Expr, Tuple
-from os import read
-import re
-from enum import Enum, auto
-from typing import Generic, Callable, Self, Type, TypeVar, Union
+from abc import ABC
+from ast import Expr
+from typing import Generic, Callable, TypeVar
 
 from common import TT, PrimitiveTypes, bcolors, operators
 from ast_exprs import (
