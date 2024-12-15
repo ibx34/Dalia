@@ -1,3 +1,4 @@
+from asm import ASM
 from ast_1 import Parser, Lexer # type: ignore
 
 #from asm import ASM # type: ignore
@@ -11,9 +12,9 @@ def run():
     parser = Parser(lexer.results)
     parser.parse_all()
     print(f"{parser.results}\n\n")
-    # code_generator = ASM(parser.results)
-    # code_generator.generate()
-    # print(f"{code_generator.lines}")
+    code_generator = ASM(parser.results)
+    code_generator.generate()
+    print(f"{code_generator.lines}")
 
 
 if __name__ == "__main__":

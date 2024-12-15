@@ -2,7 +2,7 @@ from abc import ABC
 from ast import Expr
 from typing import Generic, Callable, TypeVar
 
-from common import TT, PrimitiveTypes, bcolors, operators
+from common import TT, Cursor, PrimitiveTypes, bcolors, operators
 from ast_exprs import (
     AstirExpr,
     ShuntingYardAlgorithmResults,
@@ -49,25 +49,6 @@ def get_op(possible_op: Token | None) -> tuple[str, dict[str, int]] | None:
 
 def is_valid_ident(c: str) -> bool:
     return c.isalnum() or c == "_"
-
-
-T = TypeVar("T")
-
-
-class Cursor(ABC, Generic[T]):
-    def __init__(self, input: list[T]) -> None:
-        super().__init__()
-        self.input = input
-        self.at = 0
-
-    def advance(self) -> None:
-        self.at += 1
-
-    def current(self) -> T | None:
-        if self.at >= len(self.input):
-            return None
-        return self.input[self.at]
-
 
 class Lexer(Cursor):
     def __init__(self, input: str) -> None:

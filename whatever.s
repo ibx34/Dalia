@@ -5,7 +5,7 @@
 // X16 - linux function number
 //
 .global _start             // Provide program starting address to linker
-.p2align 3 // Feedback from Peter
+.p2align 3
 
 _return_int:
 add X1, X0, 2

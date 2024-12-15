@@ -10,5 +10,4 @@
 - `m'` and `t'` are "prime forms". open issue for naming ideas or concerns! More on these later:tm:
 
 
-justin@Justins-MBP-2 Cylindropuntia % as -o whatever.o whatever.s
-justin@Justins-MBP-2 Cylindropuntia % ld -macosx_version_min 13.0.0 -o whatever whatever.o -lSystem -syslibroot `xcrun -sdk macosx --show-sdk-path` -e _start -arch arm64
+as -o whatever.o whatever.s && ld -macosx_version_min 13.0.0 -o whatever whatever.o -lSystem -syslibroot `xcrun -sdk macosx --show-sdk-path` -e main -arch arm64

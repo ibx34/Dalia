@@ -1,4 +1,6 @@
+from abc import ABC
 from enum import Enum, auto
+from typing import Generic, TypeVar
 
 
 # https://stackoverflow.com/questions/287871/how-do-i-print-colored-text-to-the-terminal
@@ -54,3 +56,20 @@ operators = {
         "associativity": 0,
     },
 }
+
+T = TypeVar("T")
+
+
+class Cursor(ABC, Generic[T]):
+    def __init__(self, input: list[T]) -> None:
+        super().__init__()
+        self.input = input
+        self.at = 0
+
+    def advance(self) -> None:
+        self.at += 1
+
+    def current(self) -> T | None:
+        if self.at >= len(self.input):
+            return None
+        return self.input[self.at]
