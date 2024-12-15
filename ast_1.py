@@ -6,7 +6,23 @@ from enum import Enum, auto
 from typing import Generic, Callable, Self, Type, TypeVar, Union
 
 from common import TT, PrimitiveTypes, bcolors, operators
-from ast_exprs import AstirExpr, ShuntingYardAlgorithmResults, Identifier, Literal, PrimitiveType, Reference, AstirTuple, SymbolTable, Parameter, Symbol, Parenthesized, Lambda, Assignment, Application, check_is_allowed
+from ast_exprs import (
+    AstirExpr,
+    ShuntingYardAlgorithmResults,
+    Identifier,
+    Literal,
+    PrimitiveType,
+    Reference,
+    AstirTuple,
+    SymbolTable,
+    Parameter,
+    Symbol,
+    Parenthesized,
+    Lambda,
+    Assignment,
+    Application,
+    check_is_allowed,
+)
 
 
 class Token:
@@ -22,6 +38,7 @@ class Token:
     def __repr__(self) -> str:
         return f"{self.ty} ({self.val})"
 
+
 def get_op(possible_op: Token | None) -> tuple[str, dict[str, int]] | None:
     if (
         possible_op is None
@@ -31,6 +48,7 @@ def get_op(possible_op: Token | None) -> tuple[str, dict[str, int]] | None:
         return None
     op = operators[possible_op.ty.value]
     return (possible_op.ty.value, op)
+
 
 def is_valid_ident(c: str) -> bool:
     return c.isalnum() or c == "_"
@@ -196,7 +214,7 @@ class Lexer(Cursor):
 class Parser(Cursor):
     def __init__(self, input: list[Token]) -> None:
         super().__init__(input)
-        self.results: list['AstirExpr'] = []
+        self.results: list["AstirExpr"] = []
         global_symbols = SymbolTable(0)
         # TODO: we are waiting for typedef!
         global_symbols.insert("int", PrimitiveType(PrimitiveTypes.INT))
@@ -313,7 +331,7 @@ class Parser(Cursor):
                 #     paren = self.parse()
                 #     # raise Exception(f"Enum value(?): {c.val} -> {paren}")
                 #     result = DataVariantWithInnerValue(Identifier(c.val), paren)
-                else:   
+                else:
                     self.advance()
                     for_assignment = False
                     if (
@@ -352,7 +370,9 @@ class Parser(Cursor):
             elif len(the_between) == 1:
                 # Init Parenthesized with an expression (the_between[0])
                 # to do exactly what it says... for example (\ :: int ...)
-                result = Parenthesized(PrimitiveType(PrimitiveTypes.UNIT), the_between[0])
+                result = Parenthesized(
+                    PrimitiveType(PrimitiveTypes.UNIT), the_between[0]
+                )
             elif len(the_between) > 1 and has_comma:
                 # Handle tuples
                 result = AstirTuple(the_between)
@@ -455,7 +475,8 @@ class Parser(Cursor):
                         possible_arg = self.parse()
                         if possible_arg is None:
                             raise Exception("Failed to parse")
-                        if possible_arg.ty.ty != type_symbol.val.ty:
+
+                        if possible_arg.ty != type_symbol.val.ty:
                             raise Exception(
                                 f"{bcolors.FAIL}{bcolors.BOLD}Type mismatch{bcolors.ENDC}"
                             )

@@ -6,6 +6,7 @@ class AstirExpr(ABC):
     def __init__(self, ty: Union['PrimitiveTypes', 'AstirExpr']):
         super().__init__()
         self.ty = ty
+        
 
 def check_is_allowed(AstirExpr: AstirExpr | None) -> bool:
     allowed = AstirExpr is not None or (
@@ -83,6 +84,9 @@ class LambdaDefinition(AstirExpr):
         
         self.parameters=parameters
 
+    def __repr__(self):
+        return f"LambdaDef(Parameters={self.parameters})"
+
 
 class Lambda(AstirExpr):
     def __init__(self, parameters: SymbolTable, body: AstirExpr):
@@ -91,6 +95,8 @@ class Lambda(AstirExpr):
         self.definition = lambda_def
         self.body = body
 
+    def __repr__(self):
+        return f"Lambda(Def={self.definition}, Body={self.body})"
 
 class Parenthesized(AstirExpr):
     def __init__(self, ty: AstirExpr | PrimitiveTypes, inner: AstirExpr | None = None) -> None:
