@@ -1,53 +1,18 @@
 from abc import ABC, abstractmethod
+from ast import Expr, Tuple
 from os import read
 import re
 from enum import Enum, auto
-from typing import Generic, Callable, Self, Type, TypeVar
+from typing import Generic, Callable, Self, Type, TypeVar, Union
 
-
-class PrimitiveTypes(Enum):
-    INT = auto()
-    STR = auto()
-    FLOAT = auto()
-    UNIT = auto()
-
-
-class TT(Enum):
-    COLON = ":"
-    COMMA = ","
-    BACKSLASH = "\\"
-    FUNCTION_ARROW = "→"
-    PLUS = "+"
-    # minus!
-    DASH = "-"
-    DOUBLE_COLON = "::"
-    OPEN_PAREN = "("
-    CLOSE_PAREN = ")"
-    OPEN_SQUARE = "["
-    PIPE = "|"
-    CLOSE_SQUARE = "]"
-    IDENT = "IDENT"
-    LITERAL = "LITERAL"
-    COMMENT = "COMMENT"
-    PRIME_FORM = "PRIME_FORM"
-
-
-operators = {
-    "+": {
-        "precedence": 1,
-        # 0 = Left, 1 = Right, 2 = None
-        "associativity": 0,
-    },
-    "-": {
-        "precedence": 1,
-        # 0 = Left, 1 = Right, 2 = None
-        "associativity": 0,
-    },
-}
+from common import TT, PrimitiveTypes, bcolors, operators
+from ast_exprs import AstirExpr, ShuntingYardAlgorithmResults, Identifier, Literal, PrimitiveType, Reference, AstirTuple, SymbolTable, Parameter, Symbol, Parenthesized, Lambda, Assignment, Application, check_is_allowed
 
 
 class Token:
-    def __init__(self, ty: TT | None, prim_ty: PrimitiveTypes = None, val=None) -> None:
+    def __init__(
+        self, ty: TT | None, prim_ty: PrimitiveTypes | None = None, val=None
+    ) -> None:
         if ty == None:
             raise Exception("Token type was none...")
         self.ty = ty
@@ -57,26 +22,21 @@ class Token:
     def __repr__(self) -> str:
         return f"{self.ty} ({self.val})"
 
+def get_op(possible_op: Token | None) -> tuple[str, dict[str, int]] | None:
+    if (
+        possible_op is None
+        or possible_op.ty is None
+        or possible_op.ty not in [TT.PLUS, TT.DASH]
+    ):
+        return None
+    op = operators[possible_op.ty.value]
+    return (possible_op.ty.value, op)
 
 def is_valid_ident(c: str) -> bool:
     return c.isalnum() or c == "_"
 
 
 T = TypeVar("T")
-
-
-# https://stackoverflow.com/questions/287871/how-do-i-print-colored-text-to-the-terminal
-# simple colors for now...just need help to see my eyes suck
-class bcolors:
-    HEADER = "\033[95m"
-    OKBLUE = "\033[94m"
-    OKCYAN = "\033[96m"
-    OKGREEN = "\033[92m"
-    WARNING = "\033[93m"
-    FAIL = "\033[91m"
-    ENDC = "\033[0m"
-    BOLD = "\033[1m"
-    UNDERLINE = "\033[4m"
 
 
 class Cursor(ABC, Generic[T]):
@@ -119,10 +79,10 @@ class Lexer(Cursor):
         devance_b4_break: bool = False,
         start_str: str = "",
     ) -> str:
-        temp_str = start_str
+        temp_str: str = start_str
         while True:
             c = self.current()
-            if check(c, temp_str):
+            if c is None or check(c, temp_str):
                 if devance_b4_break:
                     self.at -= 1
                 break
@@ -171,7 +131,9 @@ class Lexer(Cursor):
                         bin(integer).replace("0b", "") if integer != 0 else "0"
                     )
 
-                    frac_bin = []  # List to store the fractional binary digits
+                    frac_bin: list[str] = (
+                        []
+                    )  # List to store the fractional binary digits
                     while (
                         fractional and len(frac_bin) < 23 + 3
                     ):  # Stop after 23+3 bits to avoid overflow
@@ -181,8 +143,8 @@ class Lexer(Cursor):
                         fractional -= (
                             bit  # Remove the integer part from the fractional value
                         )
-                    frac_bin = "".join(frac_bin)
-                    combined_bin = integer_bin + "." + frac_bin
+                    frac_bin2: str = "".join(frac_bin)
+                    combined_bin = integer_bin + "." + frac_bin2
 
                     if (
                         "1" in combined_bin
@@ -197,7 +159,7 @@ class Lexer(Cursor):
                         exponent = (
                             len(integer_bin) - 1 - first_one
                         )  # Calculate the exponent from normalization
-                        mantissa = (integer_bin + frac_bin)[
+                        mantissa = (integer_bin + frac_bin2)[
                             first_one + 1 : first_one + 24
                         ]  # Extract mantissa bits
                     else:  # Special case for zero-like numbers
@@ -228,277 +190,13 @@ class Lexer(Cursor):
             return Token(TT.IDENT, val=ident)
         else:
             return Token(TT(c))
-
-
-class Expr(ABC):
-    def __init__(self, ty: PrimitiveTypes | Self):
-        super().__init__()
-        self.ty = ty
-
-
-# E = TypeVar("E", bound="Expr")
-
-# class Expr(ABC):
-#     def __init__(self, ty: Type[E]) -> None:
-#         super().__init__()
-#         self.ty = ty
-
-#     @abstractmethod
-#     def __repr__(self) -> str:
-#         pass
-
-
-# class Type(Expr):
-#     def __init__(self, inner: PrimitiveTypes | Expr):
-#         super().__init__(inner)
-#         self.inner = inner
-
-
-def get_op(possible_op: Token | None) -> tuple[str, dict[str, int]] | None:
-    if (
-        possible_op is None
-        or possible_op.ty is None
-        or possible_op.ty not in [TT.PLUS, TT.DASH]
-    ):
-        return None
-    op = operators[possible_op.ty.value]
-    return (possible_op.ty.value, op)
-
-
-def check_is_allowed(expr: Expr | None) -> bool:
-    allowed = expr is not None or (
-        isinstance(expr, Parenthesized)
-        or isinstance(expr, Reference)
-        or isinstance(expr, Literal)
-    )
-    if expr is not None and isinstance(expr, Identifier) and expr.for_assignment:
-        allowed = False
-    return allowed
-
-
-class Symbol:
-    def __init__(self, name: str, val: Expr, belongs_to: int, id: int) -> None:
-        super().__init__()
-        self.name = name
-        self.val = val
-        self.belongs_to = belongs_to
-        self.id = id
-
-    def __repr__(self) -> str:
-        return (
-            bcolors.WARNING
-            + f'Symbol "{self.name}", value = {self.val}. Belongs to = {self.belongs_to}. ID = {self.id}'
-            + bcolors.ENDC
-        )
-
-
-class SymbolTable:
-    def __init__(self, id: int, parent: int | None = None) -> None:
-        self.symbols: dict[int, Symbol] = {}
-        self.name_to_id: dict[str, int] = {}
-        self.last_id = 0
-        self.id = id
-        self.parent = parent
-
-    def lookup(self, name: str) -> Symbol | None:
-        if name not in self.name_to_id:
-            return None
-        id = self.name_to_id[name]
-        return self.lookup_by_id(id)
-
-    def lookup_by_id(self, id: int) -> Symbol | None:
-        if id not in self.symbols:
-            return None
-        return self.symbols[id]
-
-    def insert(self, name: str, val: Expr) -> None:
-        self.last_id += 1
-        symbol = Symbol(name, val, self.id, self.last_id)
-        self.symbols[self.last_id] = symbol
-        self.name_to_id[name] = self.last_id
-
-    def __repr__(self) -> str:
-        return f"{self.symbols}"
-
-
-class LambdaDefinition(Expr):
-    def __init__(
-        self, parameters: SymbolTable | list[Expr]
-    ):  # TODO: accept symboltable or list[Expr]
-        super().__init__(self)
-        lambda_parameter_types = []
-        if isinstance(parameters, SymbolTable):
-            for i in parameters.symbols:
-                symbol = parameters.symbols[i]
-                if symbol is None:
-                    raise Exception("How did a none value sneak in?")
-                lambda_parameter_types.append(symbol.val.ty)
-        else:
-            lambda_parameter_types = parameters
-        self.parameters = lambda_parameter_types
-
-
-class Lambda(Expr):
-    def __init__(self, parameters: SymbolTable, body: Expr):
-        lambda_def = LambdaDefinition(parameters)
-        super().__init__(lambda_def)
-        self.definition = lambda_def
-        self.body = body
-
-
-class Parenthesized(Expr):
-    def __init__(self, inner: Expr = None, ty: Expr = None) -> None:
-        super().__init__(ty)
-        self.inner = inner
-
-    def __repr__(self) -> str:
-        return f"Parenthesized({self.inner})"
-
-
-class ShuntingYardAlgorithmResults(Expr):
-    def __init__(self, operators: list[str], results: list[Expr]) -> None:
-        super().__init__(PrimitiveTypes.UNIT)
-        self.oeprators = operators
-        self.results = results
-
-    def __repr__(self) -> str:
-        return f"ShuntingYardAlgorithmResults({self.results}, ops={self.oeprators})"
-
-
-class Identifier(Expr):
-    def __init__(self, value: str, for_assignment: bool = False) -> None:
-        super().__init__(PrimitiveTypes.UNIT)
-        self.value = value
-        self.for_assignment = for_assignment
-
-    def __repr__(self) -> str:
-        return f"Ident({self.value})"
-
-
-class Tuple(Expr):
-    def __init__(self, values: list[Expr]) -> None:
-        super().__init__(PrimitiveTypes.UNIT)
-        self.values = values
-
-    def __repr__(self) -> str:
-        return f"Tuple({self.values})"
-
-
-class Parameter(Expr):
-    def __repr__(self) -> str:
-        return f"Parameter"
-
-
-class Lambda(Expr):
-    def __init__(self, parameters: SymbolTable, body: Expr) -> None:
-        super().__init__(PrimitiveTypes.UNIT)
-        self.parameters = parameters
-        self.body = body
-
-    def __repr__(self) -> str:
-        return f"Lambda(P={self.parameters},B={self.body})"
-
-
-class Assignment(Expr):
-    def __init__(self, left: Expr, right: Expr) -> None:
-        super().__init__(PrimitiveTypes.UNIT)
-        self.left = left
-        self.right = right
-
-    def __repr__(self) -> str:
-        return f"Assignment ({self.left}) -> ({self.right})"
-
-
-class Reference(Expr):
-    def __init__(
-        self,
-        name: str,
-        belongs_to: int,
-        symbol_id: int,
-        copy_val: bool = False,
-    ) -> None:
-        super().__init__(PrimitiveTypes.UNIT)
-        self.name = name
-        self.symbol_id = symbol_id
-        self.belongs_to = belongs_to
-        self.copy_val = copy_val
-
-    def __repr__(self) -> str:
-        return f"Ref(ST={self.belongs_to}, Ref={self.name}, ID={self.symbol_id})"
-
-
-class Parameter(Expr):
-    def __init__(self) -> None:
-        super().__init__(PrimitiveTypes.UNIT)
-
-    def __repr__(self) -> str:
-        return f"Parameter"
-
-
-class Literal(Expr):
-    def __init__(self, literal_ty: PrimitiveTypes, val: any) -> None:
-        super().__init__(literal_ty)
-        self.val = val
-
-    def __repr__(self) -> str:
-        return f"Literal(LTY={self.ty}, V={self.val})"
-
-
-class PrimitiveType(Expr):
-    def __init__(self, inner: PrimitiveTypes) -> None:
-        super().__init__(inner)
-        self.val = inner
-
-    def __repr__(self) -> str:
-        return f"PrimitiveType(I={self.val})"
-
-
-class DataVariantWithInnerValue(Expr):
-    def __init__(self, name: Expr, inner_value: Expr) -> None:
-        super().__init__(ty=inner_value)
-        self.inner_value = inner_value
-        self.name = name
-
-    def __repr__(self) -> str:
-        return f"DataVariantWithInnerValue(NAME={self.name}, IV={self.inner_value})"
-
-
-"""
-d'Custom_data_type :: int
-d'Custom_data_type :: str
-d'Custom_data_type :: float
-d'Custom_data_type :: ()
-d'Custom_data_type :: OneVariant
-d'Custom_data_type :: OneVariant | TwoVariant
-d'Custom_data_type :: VariantWithData(int)
-d'Option :: Some(int) | None
-"""
-
-
-class CustomDataType(Expr):
-    def __init__(self, name: Expr, dt: list[Expr]) -> None:
-        super().__init__(ty=dt)
-        self.dt = dt
-        self.name = name
-
-    def __repr__(self) -> str:
-        return f"CustomDataType(_)"
-
-
-class Application(Expr):
-    def __init__(self, lambda_ref: Reference, parameters: list[Expr]):
-        super().__init__(PrimitiveTypes.UNIT)
-        self.lambda_ref = lambda_ref
-        self.parameters = parameters
-
-    def __repr__(self) -> str:
-        return f"Application(Ref={self.lambda_ref}, P={self.parameters})"
+        return Token(None)
 
 
 class Parser(Cursor):
     def __init__(self, input: list[Token]) -> None:
         super().__init__(input)
-        self.results: list[Expr] = []
+        self.results: list['AstirExpr'] = []
         global_symbols = SymbolTable(0)
         # TODO: we are waiting for typedef!
         global_symbols.insert("int", PrimitiveType(PrimitiveTypes.INT))
@@ -546,49 +244,49 @@ class Parser(Cursor):
             self.results.append(parsed)
             self.current_number_of_advances = 0
 
-    def parse(self) -> Expr | None:
+    def parse(self) -> AstirExpr | None:
         c = self.current()
-        result: Expr | None = None
+        result: AstirExpr | None = None
         if c is None:
-            result = None
-        elif c.ty == TT.PRIME_FORM:
-            self.advance()
-            if (next := self.current()) and next.ty != TT.IDENT:
-                raise Exception(
-                    f"Expected double colon after the prime form...got {next}"
-                )
-            ident = self.parse()
-            self.advance()
-            parts: list[Expr] = []
-            while True:
-                c = self.current()
-                if c is None:
-                    break
-                elif c.ty == TT.PIPE:
-                    self.advance()
-                    continue
-                part = self.parse()
-                if (
-                    not isinstance(part, Tuple)
-                    and not isinstance(part, Reference)
-                    and not isinstance(part, PrimitiveType)
-                    and not isinstance(part, DataVariantWithInnerValue)
-                    and (
-                        not isinstance(part, Identifier)
-                        or (isinstance(part, Identifier) and part.for_assignment)
-                    )
-                ):
-                    self.at -= 1
-                    break
+            return None
 
-                parts.append(part)
+        # elif c.ty == TT.PRIME_FORM:
+        #     self.advance()
+        #     if (next := self.current()) and next.ty != TT.IDENT:
+        #         raise Exception(
+        #             f"Expected double colon after the prime form...got {next}"
+        #         )
+        #     ident = self.parse()
+        #     self.advance()
+        #     parts: list[Expr] = []
+        #     while True:
+        #         c = self.current()
+        #         if c is None:
+        #             break
+        #         elif c.ty == TT.PIPE:
+        #             self.advance()
+        #             continue
+        #         part = self.parse()
+        #         if (
+        #             not isinstance(part, Tuple)
+        #             and not isinstance(part, Reference)
+        #             and not isinstance(part, PrimitiveType)
+        #             and (
+        #                 not isinstance(part, Identifier)
+        #                 or (isinstance(part, Identifier) and part.for_assignment)
+        #             )
+        #         ):
+        #             self.at -= 1
+        #             break
 
-            result = CustomDataType(ident, parts)
+        #         parts.append(part)
+
+        #     result = CustomDataType(ident, parts)
         elif c.ty == TT.LITERAL:
             if c.prim_ty is None or c.val is None:
                 raise Exception("Invalid primitive type...how?")
             self.advance()
-            result = Literal(PrimitiveType(c.prim_ty), c.val)
+            result = Literal(c.prim_ty, c.val)
         elif c.ty == TT.IDENT:
             if c.val is None:
                 raise Exception("Identifier with no value?")
@@ -610,12 +308,12 @@ class Parser(Cursor):
                     if expr is not None and isinstance(expr, Reference):
                         sym_table.insert(c.val, expr)
                         result = Parameter()
-                elif next.ty is TT.OPEN_PAREN:
-                    self.advance()
-                    paren = self.parse()
-                    # raise Exception(f"Enum value(?): {c.val} -> {paren}")
-                    result = DataVariantWithInnerValue(Identifier(c.val), paren)
-                else:
+                # elif next.ty is TT.OPEN_PAREN:
+                #     self.advance()
+                #     paren = self.parse()
+                #     # raise Exception(f"Enum value(?): {c.val} -> {paren}")
+                #     result = DataVariantWithInnerValue(Identifier(c.val), paren)
+                else:   
                     self.advance()
                     for_assignment = False
                     if (
@@ -628,7 +326,7 @@ class Parser(Cursor):
 
         elif c.ty == TT.OPEN_PAREN:
             self.advance()
-            the_between: list[Expr] = []
+            the_between: list[AstirExpr] = []
             has_comma: bool = False
             while True:
                 c = self.current()
@@ -650,14 +348,14 @@ class Parser(Cursor):
                 # We init Parenthesized with no expression so
                 # that it is treated as an empty tuple, non value
                 # or dead value. Its just a placeholder ig?
-                result = Parenthesized(ty=self.lookup("unit", 0))
+                result = Parenthesized(ty=PrimitiveTypes.UNIT)
             elif len(the_between) == 1:
                 # Init Parenthesized with an expression (the_between[0])
                 # to do exactly what it says... for example (\ :: int ...)
-                result = Parenthesized(the_between[0])
+                result = Parenthesized(PrimitiveType(PrimitiveTypes.UNIT), the_between[0])
             elif len(the_between) > 1 and has_comma:
                 # Handle tuples
-                result = Tuple(the_between)
+                result = AstirTuple(the_between)
 
             # TODO: handle all function call arg parsing
             # function calls can use () but are not required
@@ -712,6 +410,8 @@ class Parser(Cursor):
                 _lambda,
             )
 
+        if result is None:
+            raise Exception("Failed to parse ANYTHING.")
         # At this point, past previous parsing, we should have advanced past
         # the last token and now be face-to-face with the rare, elusive, OP!
         c = self.current()
@@ -726,7 +426,7 @@ class Parser(Cursor):
             if symbol is None:
                 raise Exception(f"Unkown symbol reference: {result}")
             if isinstance(symbol.val, Lambda):
-                parameters = symbol.val.parameters
+                parameters = symbol.val.definition.parameters
                 p_len = len(parameters.symbols.keys())
 
                 # if its 1 then it HAS to be the return type...right?
@@ -740,7 +440,7 @@ class Parser(Cursor):
                 elif p_len > 1:
                     # NOW we have more arguments so we will want to parse more.
                     self.current_number_of_advances = 0
-                    possible_args: list[Expr] = []
+                    possible_args: list[AstirExpr] = []
 
                     for k, ref in parameters.symbols.items():
                         if ref.name == "ret":
@@ -753,6 +453,8 @@ class Parser(Cursor):
                         ):
                             break
                         possible_arg = self.parse()
+                        if possible_arg is None:
+                            raise Exception("Failed to parse")
                         if possible_arg.ty.ty != type_symbol.val.ty:
                             raise Exception(
                                 f"{bcolors.FAIL}{bcolors.BOLD}Type mismatch{bcolors.ENDC}"
@@ -787,7 +489,7 @@ class Parser(Cursor):
         # for parsing arithmetic
         self.op_stack.append(possible_op[0])
         self.already_parsing_sya = True
-        res: list[Expr] = [result]
+        res: list[AstirExpr] = [result]
         while True:
             c = self.current()
             possible_op = get_op(c)
