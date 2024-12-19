@@ -7,3 +7,8 @@ Main
 *.hi
 __pycache__
 whatever
+whatever.s
+*.s
+*.o
+boot
+whatever
