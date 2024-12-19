@@ -108,7 +108,7 @@ class Parenthesized(AstirExpr):
 
 
 class ShuntingYardAlgorithmResults(AstirExpr):
-    def __init__(self, operators: list[str], results: list[AstirExpr]) -> None:
+    def __init__(self, operators: list[str], results: list[AstirExpr | str]) -> None:
         super().__init__(PrimitiveTypes.UNIT)
         self.oeprators = operators
         self.results = results

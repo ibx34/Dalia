@@ -488,7 +488,7 @@ class Parser(Cursor):
         # for parsing arithmetic
         self.op_stack.append(possible_op[0])
         self.already_parsing_sya = True
-        res: list[AstirExpr] = [result]
+        res: list[AstirExpr | str] = [result]
         while True:
             c = self.current()
             possible_op = get_op(c)
@@ -504,8 +504,8 @@ class Parser(Cursor):
                 self.at -= 1
                 break
             res.append(parsed)
-
-        sya_res = ShuntingYardAlgorithmResults(self.op_stack, res)
+        res.extend(self.op_stack)
         self.op_stack = []
+        sya_res = ShuntingYardAlgorithmResults(self.op_stack, res)
         self.already_parsing_sya = False
         return sya_res  # type: ignore
