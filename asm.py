@@ -1,5 +1,11 @@
-from ast_exprs import Assignment, AstirExpr, Identifier, Lambda, Literal, Reference, ShuntingYardAlgorithmResults, Symbol, SymbolTable  # type: ignore
+from ast_exprs import Application, Assignment, AstirExpr, Identifier, Lambda, Literal, Reference, ShuntingYardAlgorithmResults, Symbol, SymbolTable  # type: ignore
 from common import Cursor, PrimitiveTypes
+
+
+class Register:
+    def __init__(self, reg: int, being_used_by: int):
+        self.being_used_by = being_used_by
+        self.reg = reg
 
 
 class ASM(Cursor):
@@ -7,11 +13,22 @@ class ASM(Cursor):
         self, input: list[AstirExpr], symbol_tables: dict[int, SymbolTable]
     ) -> None:
         super().__init__(input)
-        self.lines: list[str] = [".global main", ".p2align 3"]
+        self.lines: list[str] = [".global _start", ".p2align 3"]
         self.symbol_tables: dict[int, SymbolTable] = symbol_tables
         # Format (ref_id, register)
         self.ref_id_and_register: list[tuple[int, int]] = []
+        self.fn_register_man: dict[int, list[tuple[int, int]]] = {}
         self.current_usable_register = 0
+
+        # This should be cleared after every generate call.
+        self.registers_in_use: list[Register] = []
+
+    def generate_all(self):
+        while self.current() is not None:
+            generated = self.generate()
+            self.lines.extend(generated)
+            self.advance()
+            self.registers_in_use = []
 
     def lookup_symbol(self, symbol_table: int, symbol_id: int) -> Symbol | None:
         if symbol_table not in self.symbol_tables:
@@ -27,13 +44,40 @@ class ASM(Cursor):
         to_add: list[str] = []
         if isinstance(c_expr, Assignment):
             if isinstance(c_expr.right, Lambda) and isinstance(c_expr.left, Identifier):
+                symbols = c_expr.right.definition.parameters.symbols
+
+                # Reserve registers for the arguments!!!
+                def reserve_register(x: int) -> tuple[int, int]:
+                    ret = (x, self.current_usable_register)
+                    self.current_usable_register += 1
+                    return ret
+
+                reserved_registers: list[tuple[int, int]] = list(
+                    map(reserve_register, symbols)
+                )[:-1]
+                self.fn_register_man[c_expr.right.belongs_to] = reserved_registers
                 to_add.append(f"{c_expr.left.value}:")
-                print(f"Being added: {to_add}")
+                print(f"Being added: {c_expr.right.definition}")
                 generated_body = self.generate(c_expr.right.body)
                 print(f"Generated body -> {generated_body}")
                 to_add.extend(generated_body)
                 to_add.append("ret")
-                self.lines.extend(to_add)
+        elif isinstance(c_expr, Application):
+            reserved_registers = self.fn_register_man[c_expr.lambda_ref.symbol_id]
+            for idx, v in enumerate(reserved_registers):
+                if not (0 <= idx < len(c_expr.parameters)):
+                    raise Exception(f"Invalid application")
+                param: AstirExpr = c_expr.parameters[idx]
+                if not isinstance(param, Literal) or param.ty != PrimitiveTypes.INT:
+                    raise Exception("TODO: HANDLE MORE THAN JUST LITERALS")
+                to_add.append(f"mov x{v[1]}, {param.val}")
+
+            symbol = self.lookup_symbol(
+                c_expr.lambda_ref.belongs_to, c_expr.lambda_ref.symbol_id
+            )
+            if symbol is None:
+                raise Exception(f"failed to find symbol {c_expr.lambda_ref.symbol_id}")
+            to_add.append(f"bl {symbol.name}")
         elif isinstance(c_expr, Reference):
             symbol = self.lookup_symbol(c_expr.belongs_to, c_expr.symbol_id)
             if symbol is None:
@@ -45,7 +89,6 @@ class ASM(Cursor):
                 register = self.current_usable_register
                 self.ref_id_and_register.append((symbol.val.symbol_id, register))
                 to_add.append(f"x{register}")  # Temp
-                self.current_usable_register += 1
         elif isinstance(c_expr, ShuntingYardAlgorithmResults):
             if len(c_expr.oeprators) > 0:
                 raise Exception("Invalid shunting yard algorithm")

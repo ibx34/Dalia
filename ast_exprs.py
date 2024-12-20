@@ -89,10 +89,11 @@ class LambdaDefinition(AstirExpr):
 
 
 class Lambda(AstirExpr):
-    def __init__(self, parameters: SymbolTable, body: AstirExpr):
+    def __init__(self, parameters: SymbolTable, body: AstirExpr, belongs_to: int):
         lambda_def = LambdaDefinition(parameters)
         super().__init__(lambda_def)
         self.definition = lambda_def
+        self.belongs_to = belongs_to
         self.body = body
 
     def __repr__(self):

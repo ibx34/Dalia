@@ -13,9 +13,7 @@ def run():
     parser.parse_all()
     print(f"{parser.results}\n\n")
     code_generator = ASM(parser.results, parser.symbol_tables)
-    code_generator.generate()
-    code_generator.advance()
-    code_generator.generate()
+    code_generator.generate_all()
     print(f"{code_generator.lines}")
     open("boot.s", "w+").write("\n".join(code_generator.lines))
 

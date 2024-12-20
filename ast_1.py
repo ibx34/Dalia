@@ -400,9 +400,10 @@ class Parser(Cursor):
             popped = self.results.pop()
             if not isinstance(popped, Identifier):
                 return popped
-            _lambda = Lambda(lambda_symbol_table, body)
             self.using_st = 0
-            self.symbol_tables[self.using_st].insert(popped.value, _lambda)
+            symbol_table = self.symbol_tables[self.using_st]
+            _lambda = Lambda(lambda_symbol_table, body, symbol_table.last_id + 1)
+            symbol_table.insert(popped.value, _lambda)
             result = Assignment(
                 popped,
                 _lambda,
